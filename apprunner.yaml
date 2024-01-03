@@ -14,6 +14,6 @@ build:
       value: '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'
 
 run:
-  command: python main.py # command to run fastapi
+  command: python3 main.py # command to run fastapi
   network:
     port: 8080 # port AppRunner will expose
