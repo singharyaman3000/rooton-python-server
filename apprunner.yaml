@@ -2,7 +2,6 @@ version: 1.0 # version of the specification
 runtime: python311 # runtime to use
 build:
   commands:
-    build:
       - pip3 install -r requirements.txt # install dependencies
 
   env: # define environment variables
@@ -14,6 +13,6 @@ build:
       value: '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'
 
 run:
-  command: python3 main.py # command to run fastapi
+  command: python3 -m uvicorn main:app --host 0.0.0.0 --port 8080 # command to run fastapi
   network:
     port: 8080 # port AppRunner will expose
