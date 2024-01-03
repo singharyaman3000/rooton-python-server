@@ -339,4 +339,12 @@ async def recommend_courses(request: CourseRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    print("Starting webserver...")
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 8080)),
+        debug=os.getenv("DEBUG", False),
+        log_level=os.getenv('LOG_LEVEL', "info"),
+        proxy_headers=True
+    )
