@@ -28,7 +28,7 @@ class CourseResponse(BaseModel):
     data: dict
 
 # Function to fetch all data (similar to your script)
-# @cached(cache)
+@cached(cache)
 def fetch_all_data(database, collection):
     # Connect to MongoDB (Specify your MongoDB URI)
     MONGODB_URI = os.getenv('MONGODB_URI')
@@ -45,18 +45,18 @@ def fetch_all_data(database, collection):
     client.close()
     return results
 
-# async def preload_cache():
-#     try:
-#         # Preload data for each collection
-#         fetch_all_data("test", "courses")
-#         fetch_all_data("test", "userdetails")
-#         print("caching done")
-#         # Add more collections as needed
-#     except Exception as e:
-#         print(f"Error during cache preloading: {e}")
+async def preload_cache():
+    try:
+        # Preload data for each collection
+        fetch_all_data("test", "courses")
+        fetch_all_data("test", "userdetails")
+        print("caching done")
+        # Add more collections as needed
+    except Exception as e:
+        print(f"Error during cache preloading: {e}")
 
 # Register the preload_cache function to run at startup
-# app.add_event_handler("startup", preload_cache)
+app.add_event_handler("startup", preload_cache)
 
 
 def process_budget(budget_str):
