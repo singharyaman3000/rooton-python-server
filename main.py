@@ -69,6 +69,19 @@ def fetch_all_data(database, collection):
     client.close()
     return results
 
+def fetch_data_by_query(database, collection, query):
+    MONGODB_URI = os.getenv('MONGODB_URI')
+    client = pymongo.MongoClient(MONGODB_URI)
+
+    db = client[database]
+    collection = db[collection]
+
+    cursor = collection.find(query)
+    documents = list(cursor)
+    
+    client.close()
+    return documents
+
 async def preload_cache():
     try:
         # Preload data for each collection
@@ -471,13 +484,23 @@ def email_verification(receiver_emailID):
 
     return OTP
 
+def is_email_present(email: str) -> bool:
+    """Check if the email is already in the database."""
+    database_name = "test"
+    collection_name = "userdetails"
+    query = {"email": email}
+    results = fetch_data_by_query(database_name, collection_name, query)
+    return len(results) > 0
+
 @app.post("/send-otp")
 def send_otp(request: EmailRequest):
     try:
         # Call your email_verification function here
-
-        otp = email_verification(request.email)
-        return {"OTP": otp}
+        if is_email_present(request.email):
+            return {"Status": "Present", "Message": "Email already exists"}
+        else:
+            otp = email_verification(request.email)
+            return {"Status": "Success", "OTP": otp}
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error sending email")
 
