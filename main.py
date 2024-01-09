@@ -204,7 +204,9 @@ async def recommend_courses(request: CourseRequest):
             new_key = 'Seasons'
         received_dictionary[new_key] = my_dict[key]
     received_dictionary['Length'] = int(received_dictionary.get('Length', 0) or 0)
-    received_dictionary['Fee'] = int(received_dictionary.get('Fee', 0) or 0)
+    if received_dictionary['Fee'] == '':
+        received_dictionary['Fee'] = 0
+    # received_dictionary['Fee'] = int(received_dictionary.get('Fee', '') or 0)
     if received_dictionary['Fee']!=0:
         fee_lower, fee_max = process_budget(received_dictionary['Fee'])
         received_dictionary['FeeLower'] = fee_lower
@@ -232,15 +234,24 @@ async def recommend_courses(request: CourseRequest):
         print(response)
         exit()
     openai.api_key = os.getenv("OPEN_AI_KEY")
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt="List 18 courses related to " +
-        selected_fos +
-        " that can be studied in canada",
-        temperature=0.7,
-        max_tokens=200,
-    )
-    selected_fos = response.choices[0].text + " " + selected_fos
+    messages = [{
+        "role": "system",
+        "content": "Generate a list of 18 courses related to " + selected_fos + " that are available at Canadian universities or colleges, including a mix of undergraduate, postgraduate, and certification programs if applicable."
+        },
+        {
+        "role": "user",
+        "content": "Hi"
+        },]
+    response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=messages,
+            # temperature=0.7,
+            max_tokens=200
+
+        )
+    message = response['choices'][0]['message']['content']
+    print(message)
+    selected_fos = message + " " + selected_fos
 
     title = selected_fos
     x = title.replace(",", " ")
@@ -321,8 +332,6 @@ async def recommend_courses(request: CourseRequest):
                                 'Percentage', 'Backlog', 'Gap', 'Campus', 'IeltsOverall', "PteOverall", 'TOEFLOverall', "DuolingoOverall", 'GRE', 'GMAT', 'City', 'Province', 'Visa Chances', 'PR'])
     noteligible = noteligible.reindex(columns=['CreatedOn', 'FieldOfStudy', 'InstituteName', 'Title', 'Level', 'Length', 'ApplicationFee', 'FeeText', 'Seasons', 'Status',
                                       'Deadline', 'Percentage', 'Backlog', 'Gap', 'Campus', 'IeltsOverall', "PteOverall", 'TOEFLOverall', "DuolingoOverall", 'GRE', 'GMAT', 'City', 'Province', 'Notes'])
-
-    data = []
 
     eligible.fillna("N/A", inplace=True)
     eligible =  eligible.head(31)
