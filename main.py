@@ -407,7 +407,7 @@ def email_verification(receiver_emailID):
               </tbody>
             </table>
             <h1 style="color:#1d1c1d;font-size:36px;font-weight:700;margin:30px 0;padding:0;line-height:42px">Confirm your email address</h1>
-            <p style="font-size:20px;line-height:28px;margin:16px 0;margin-bottom:30px">Your confirmation code is below - enter it in your open browser window and we&
+            <p style="font-size:20px;line-height:28px;margin:16px 0;margin-bottom:30px">Your confirmation code is below - enter it in your open browser window and we'll help you get signed in.</p>
             <table style="width:100%;background:rgb(245, 244, 245);border-radius:4px;margin-right:50px;margin-bottom:30px;padding:43px 23px" align="center" border="0" cellPadding="0" cellSpacing="0" role="presentation">
               <tbody>
                 <tr>
@@ -417,7 +417,7 @@ def email_verification(receiver_emailID):
                 </tr>
               </tbody>
             </table>
-            <p style="font-size:14px;line-height:24px;margin:16px 0;color:#000">If you didn&
+            <p style="font-size:14px;line-height:24px;margin:16px 0;color:#000">If you didn't request this email, there's nothing to worry about - you can safely ignore it.</p>
             <table style="margin-bottom:32px;width:100%" border="0" cellPadding="0" cellSpacing="10" align="left">
               <tr>
                 <td align="left" valign="top"><img alt="Rooton" src="https://i.postimg.cc/wMn5hJ9g/rooton.png" width="auto" height="50" style="display:block;outline:none;border:none;text-decoration:none" /></td>
@@ -427,9 +427,9 @@ def email_verification(receiver_emailID):
             <table style="width:100%;font-size:12px;color:#b7b7b7;line-height:15px;text-align:left;margin-bottom:50px" align="center" border="0" cellPadding="0" cellSpacing="0" role="presentation">
               <tbody>
                 <tr>
-                  <td><a target="_blank" style="color:#b7b7b7;text-decoration:underline" href="https://rooton.ca" rel="noopener noreferrer">Our blog</a>   |   <a target="_blank" style="color:#b7b7b7;text-decoration:underline" href="https://slack.com/legal" rel="noopener noreferrer">Policies</a>   |   <a target="_blank" style="color:#b7b7b7;text-decoration:underline" href="https://slack.com/help" rel="noopener noreferrer">Help center</a>   |   <a target="_blank" style="color:#b7b7b7;text-decoration:underline" href="https://slack.com/community" rel="noopener noreferrer" data-auth="NotApplicable" data-linkindex="6">Slack Community</a>
-                    <p style="font-size:12px;line-height:15px;margin:16px 0;color:#b7b7b7;text-align:left;margin-bottom:50px">©2022 Rooton Technologies, LLC, a Salesforce company. <br />500 Howard Street, San Francisco, CA 94105, USA <br /><br />All rights reserved.</p>
-                    <p style="font-size:12px;line-height:15px;margin:16px 0;color:#b7b7b7;text-align:left;margin-bottom:50px">©2022 Rooton Technologies, LLC, a Salesforce company. <br />500 Howard Street, San Francisco, CA 94105, USA <br /><br />A{1}</p>
+                  <td><a target="_blank" style="color:#b7b7b7;text-decoration:underline" href="https://rooton.ca/immigration-insights" rel="noopener noreferrer">Our blog</a>   |   <a target="_blank" style="color:#b7b7b7;text-decoration:underline" href="https://rooton.ca/privacy-policy" rel="noopener noreferrer">Policies</a>   |   <a target="_blank" style="color:#b7b7b7;text-decoration:underline" href="https://rooton.ca/disclaimer" rel="noopener noreferrer">Disclaimer</a>   |   <a target="_blank" style="color:#b7b7b7;text-decoration:underline" href="https://rooton.ca/terms-and-conditions" rel="noopener noreferrer" data-auth="NotApplicable" data-linkindex="6">Terms & Conditions</a>
+                    <p style="font-size:12px;line-height:15px;margin:16px 0;color:#b7b7b7;text-align:left;margin-bottom:10px">Copyright © 2024 Root On Immigration Consultants, Inc. or its affiliates.<br />706-1800, Blvd, Rene-Levesque Ouest,<br /> Montreal Quebec, H3H 2H2. <br /><p style="margin-block:6px">All Rights Reserved.</p></p>
+                    <p style="font-size:12px;line-height:1px;margin:16px 0;color:#b7b7b7;text-align:left;margin-bottom:50px"><br />{1}</p>
                   </td>
                 </tr>
               </tbody>
