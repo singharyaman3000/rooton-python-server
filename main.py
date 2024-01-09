@@ -189,6 +189,7 @@ def core_model(fos, level,college_df):
 
 @app.post("/recommend_courses", response_model=CourseResponse)
 async def recommend_courses(request: CourseRequest):
+    print("recieved Request", request)
     start = time.time()
     my_dict = request.dictionary
     received_dictionary = {}
