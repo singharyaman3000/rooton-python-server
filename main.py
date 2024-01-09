@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
 import pymongo
@@ -24,6 +25,17 @@ load_dotenv()
 cache = TTLCache(maxsize=1000000, ttl=86400)
 
 app = FastAPI()
+
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
 
 # Pydantic models for request and response
 class CourseRequest(BaseModel):
@@ -463,6 +475,7 @@ def email_verification(receiver_emailID):
 def send_otp(request: EmailRequest):
     try:
         # Call your email_verification function here
+
         otp = email_verification(request.email)
         return {"OTP": otp}
     except Exception as e:
