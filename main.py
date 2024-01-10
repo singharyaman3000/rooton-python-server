@@ -7,7 +7,6 @@ import os
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import pairwise as sk
 import json
-from dotenv import load_dotenv
 import re
 import openai
 import time
@@ -20,8 +19,10 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import datetime
+import boto3
+from botocore.exceptions import ClientError
 
-load_dotenv()
+
 cache = TTLCache(maxsize=1000000, ttl=86400)
 
 app = FastAPI()
@@ -50,6 +51,25 @@ class CourseResponse(BaseModel):
 class EmailRequest(BaseModel):
     email: str
 
+
+def get_secret():
+    secret_name = "ENVforFASTAPI"
+    region_name = "us-east-1"
+    # Create a Secrets Manager client
+    session = boto3.session.Session()
+    client = session.client(
+        service_name='secretsmanager',
+        region_name=region_name
+    )
+    try:
+        get_secret_value_response = client.get_secret_value(
+            SecretId=secret_name
+        )
+    except ClientError as e:
+        raise e
+    secret = get_secret_value_response['SecretString']
+    dict_secret = json.loads(secret)
+    return dict_secret
 
 # Function to fetch all data (similar to your script)
 @cached(cache)
@@ -92,7 +112,18 @@ async def preload_cache():
     except Exception as e:
         print(f"Error during cache preloading: {e}")
 
-# Register the preload_cache function to run at startup
+async def startup_event():
+    secret = get_secret()
+    os.environ['MONGODB_URI'] = secret['MONGODB_URI']
+    os.environ['OPEN_AI_KEY'] = secret['OPEN_AI_KEY']
+    os.environ['EMAIL'] = secret['EMAIL']
+    os.environ['EMAIL_PSK'] = secret['EMAIL_PSK']
+    os.environ['ALLOWED_ORIGINS'] = secret['ALLOWED_ORIGINS']
+    print("env loaded")
+
+
+# Register the preload_cache & startup_event function to run at startup
+app.add_event_handler("startup", startup_event)
 app.add_event_handler("startup", preload_cache)
 
 
@@ -104,6 +135,30 @@ def process_budget(budget_str):
     else:
         lower_limit, upper_limit = map(int, budget_str.split("-"))
     return lower_limit, upper_limit
+
+def GPTfunction(messages, max_tokens_count=350, text=False):
+    openai.api_key = os.getenv("OPEN_AI_KEY")
+    if text:
+        response = openai.Completion.create(
+            model="gpt-3.5-turbo-instruct",
+            prompt=messages,
+            temperature=0.7,
+            max_tokens=max_tokens_count
+        )
+        message = response['choices'][0]['text']
+        # print(message)
+        return message
+    else:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=messages,
+            # temperature=0.7,
+            max_tokens=max_tokens_count
+
+        )
+        message = response['choices'][0]['message']['content']
+        # print(message)
+        return message
 
 def priorty(dataframe, dictionary, selected_fos):
     results=[]
@@ -223,7 +278,7 @@ def core_model(fos, level,college_df):
 
 @app.post("/recommend_courses", response_model=CourseResponse)
 async def recommend_courses(request: CourseRequest):
-    print("recieved Request", request)
+    # print("recieved Request", request)
     start = time.time()
     my_dict = request.dictionary
     received_dictionary = {}
@@ -241,7 +296,6 @@ async def recommend_courses(request: CourseRequest):
     received_dictionary['Length'] = int(received_dictionary.get('Length', 0) or 0)
     if received_dictionary['Fee'] == '':
         received_dictionary['Fee'] = 0
-    # received_dictionary['Fee'] = int(received_dictionary.get('Fee', '') or 0)
     if received_dictionary['Fee']!=0:
         fee_lower, fee_max = process_budget(received_dictionary['Fee'])
         received_dictionary['FeeLower'] = fee_lower
@@ -266,27 +320,21 @@ async def recommend_courses(request: CourseRequest):
 
     if selected_fos == "":
         response = {"Error": "Please Select A Field Of Study"}
-        print(response)
+        # print(response)
         exit()
     openai.api_key = os.getenv("OPEN_AI_KEY")
-    messages = [{
-        "role": "system",
-        "content": "Generate a list of 18 courses related to " + selected_fos + " that are available at Canadian universities or colleges, including a mix of undergraduate, postgraduate, and certification programs if applicable."
-        },
-        {
-        "role": "user",
-        "content": "Hi"
-        },]
-    response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=messages,
-            # temperature=0.7,
-            max_tokens=200
+    # messages = [{
+    #     "role": "system",
+    #     "content": "Generate a list of 18 courses related to " + selected_fos + " that are available at Canadian universities or colleges, including a mix of undergraduate, postgraduate, and certification programs if applicable."
+    #     },
+    #     {
+    #     "role": "user",
+    #     "content": "I'm interested in"+ selected_fos
+    #     },]
 
-        )
-    message = response['choices'][0]['message']['content']
-    print(message)
-    selected_fos = message + " " + selected_fos
+    messages = "Generate a list of 18 courses related to " + selected_fos + " that are available at Canadian universities or colleges, including a mix of undergraduate, postgraduate, and certification programs if applicable."
+    
+    selected_fos = GPTfunction(messages,text=True) + " " + selected_fos
 
     title = selected_fos
     x = title.replace(",", " ")
@@ -503,6 +551,24 @@ def send_otp(request: EmailRequest):
             return {"Status": "Success", "OTP": otp}
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error sending email")
+
+@app.post("/visa-pr-prob", response_model=CourseResponse)
+def visa_pr_prob(request: CourseRequest):
+    try:
+        # Call your visa_pr_prob function here
+        messages = [{
+        "role": "system",
+        "content": "Generate a list of 18 courses related to " " that are available at Canadian universities or colleges, including a mix of undergraduate, postgraduate, and certification programs if applicable."
+        },
+        {
+        "role": "user",
+        "content": "I'm interested in"+ request
+        },]
+
+        return visa_pr_prob(request.fos, request.level, request.email)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error processing request")
+
 
 if __name__ == "__main__":
     import uvicorn
