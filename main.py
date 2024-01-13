@@ -73,7 +73,7 @@ class LoginRequest(BaseModel):
 
 
 # Function to fetch all data (similar to your script)
-@cached(cache)
+# @cached(cache)
 def fetch_all_data(database, collection):
     # Connect to MongoDB (Specify your MongoDB URI)
     MONGODB_URI = os.getenv("MONGODB_URI")
@@ -158,18 +158,18 @@ def perform_database_operation(database, collection_name, operation_type, query=
         )
 
 
-async def preload_cache():
-    try:
-        # Preload data for each collection
-        fetch_all_data("test", "courses")
-        fetch_all_data("test", "userdetails")
-        print("caching done")
-        # Add more collections as needed
-    except Exception as e:
-        print(f"Error during cache preloading: {e}")
+# async def preload_cache():
+#     try:
+#         # Preload data for each collection
+#         fetch_all_data("test", "courses")
+#         fetch_all_data("test", "userdetails")
+#         print("caching done")
+#         # Add more collections as needed
+#     except Exception as e:
+#         print(f"Error during cache preloading: {e}")
 
 
-app.add_event_handler("startup", preload_cache)
+# app.add_event_handler("startup", preload_cache)
 
 
 def process_budget(budget_str):
@@ -958,6 +958,6 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=int(os.getenv("PORT", 8080)),
         debug=os.getenv("DEBUG", False),
-        log_level=os.getenv("LOG_LEVEL", "info"),
-        proxy_headers=True,
+        log_level=os.getenv('LOG_LEVEL', "info"),
+        proxy_headers=True
     )
