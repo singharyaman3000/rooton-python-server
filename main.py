@@ -73,22 +73,26 @@ class LoginRequest(BaseModel):
 
 
 # Function to fetch all data (similar to your script)
-# @cached(cache)
+@cached(cache)
 def fetch_all_data(database, collection):
-    # Connect to MongoDB (Specify your MongoDB URI)
     MONGODB_URI = os.getenv("MONGODB_URI")
-    # print("MONGODB_URI",os.getenv('MONGODB_URI'))
     client = pymongo.MongoClient(MONGODB_URI)
 
     db = client[database]
     collection = db[collection]
 
     cursor = collection.find({})
-    documents = list(cursor)
-    results = [doc for doc in documents]
 
-    client.close()
+    results = []
+    try:
+       for document in cursor:
+           results.append(document)
+    finally:
+        cursor.close()
+        client.close()
+
     return results
+
 
 
 def perform_database_operation(database, collection_name, operation_type, query=None, update_data=None):
@@ -158,18 +162,20 @@ def perform_database_operation(database, collection_name, operation_type, query=
         )
 
 
-# async def preload_cache():
-#     try:
-#         # Preload data for each collection
-#         fetch_all_data("test", "courses")
-#         fetch_all_data("test", "userdetails")
-#         print("caching done")
-#         # Add more collections as needed
-#     except Exception as e:
-#         print(f"Error during cache preloading: {e}")
+async def preload_cache():
+    try:
+        # Preload data for each collection
+        print("caching started")
+        fetch_all_data("test", "userdetails")
+        print("caching done 1")
+        fetch_all_data("test", "courses")
+        print("caching done 2")
+        # Add more collections as needed
+    except Exception as e:
+        print(f"Error during cache preloading: {e}")
 
 
-# app.add_event_handler("startup", preload_cache)
+app.add_event_handler("startup", preload_cache)
 
 
 def process_budget(budget_str):
