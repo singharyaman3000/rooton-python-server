@@ -906,7 +906,7 @@ def login(request: LoginRequest):
         raise http_exc
     except Exception as e:
         # For any other kind of exception, it's an internal server error
-        raise HTTPException(status_code=500, detail=f"Login Failed: Unexpected error")
+        raise HTTPException(status_code=500, detail=f"Login Failed: {e}")
 
 
 @app.post("/api/visa-pr-prob", response_model=CourseResponse)
