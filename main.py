@@ -1,5 +1,7 @@
-from fastapi import FastAPI, HTTPException
+from typing import Optional
+from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 import pandas as pd
 import pymongo
@@ -19,10 +21,13 @@ from dotenv import load_dotenv
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-import datetime
+from datetime import datetime, timedelta
 import secrets
 import bcrypt
 from bson import ObjectId
+from jose import JWTError, jwt
+from fastapi import Security
+
 
 load_dotenv()
 
@@ -61,6 +66,7 @@ class EmailRequest(BaseModel):
     # EmailId: str
     Phone: str
     Password: str
+    Second: bool
 
 
 class AuthRequest(BaseModel):
@@ -82,11 +88,13 @@ def fetch_all_data(database, collection):
     collection = db[collection]
 
     cursor = collection.find({})
-
+    counter = 0
     results = []
     try:
-       for document in cursor:
-           results.append(document)
+        for document in cursor:
+            counter += 1
+            print(counter)
+            results.append(document)
     finally:
         cursor.close()
         client.close()
@@ -177,6 +185,28 @@ async def preload_cache():
 
 app.add_event_handler("startup", preload_cache)
 
+# Secret key to encode the JWT token (should be kept secret)
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60  # the expiration time for the token
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: Optional[str] = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+        # You could add more user verification here if needed
+        return email
+    except JWTError:
+        raise credentials_exception
 
 def process_budget(budget_str):
     """Extract the lower and upper fee limits from the budget string."""
@@ -378,9 +408,8 @@ def core_model(fos, level, college_df):
     else:
         return {"Error": "Please Select Atleast Single Option"}
 
-
 @app.post("/api/recommend_courses", response_model=CourseResponse)
-async def recommend_courses(request: CourseRequest):
+async def recommend_courses(request: CourseRequest, email: str = Depends(get_current_user)):
     # print("recieved Request", request)
     start = time.time()
     my_dict = request.dictionary
@@ -614,119 +643,6 @@ async def recommend_courses(request: CourseRequest):
         }
     )
 
-
-def email_verification(receiver_emailID):
-    email_sender = os.getenv("EMAIL")
-    email_password = os.getenv("EMAIL_PSK")
-    email_receiver = receiver_emailID
-    subject = "Email Confirmation"
-    string = "0123456789"
-    OTP = ""
-    varlen = len(string)
-    for i in range(6):
-        OTP += string[m.floor(r.random() * varlen)]
-
-    Body = """
-        Welcome to Root-on!
-        THis is verfication code {0}
-    """.format(
-        OTP
-    )
-
-    em = EmailMessage()
-    msgRoot = MIMEMultipart("related")
-    msgRoot["Subject"] = "Confirm Your Email Address"
-    msgRoot["From"] = email_sender
-    msgRoot["To"] = email_receiver
-    msgRoot.preamble = "This is a multi-part message in MIME format."
-    msgAlternative = MIMEMultipart("alternative")
-    msgRoot.attach(msgAlternative)
-
-    msgText = MIMEText("This is the alternative plain text message.")
-    msgAlternative.attach(msgText)
-
-    msgText = MIMEText(
-        """
-    <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html lang="en">
-  <head>
-    <meta http-equiv="Content-Type" content="text/html charset=UTF-8" />
-  </head>
-  <div id="__react-email-preview" style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0">Your Account Verification Code Is ***-***<div> ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿ ‌‍‎‏﻿</div>
-  </div>
-  <table style="width:100%;background-color:#ffffff;margin:0 auto;font-family:-apple-system, BlinkMacSystemFont, &#x27;Segoe UI&#x27;, &#x27;Roboto&#x27;, &#x27;Oxygen&#x27;, &#x27;Ubuntu&#x27;, &#x27;Cantarell&#x27;, &#x27;Fira Sans&#x27;, &#x27;Droid Sans&#x27;, &#x27;Helvetica Neue&#x27;, sans-serif" align="center" border="0" cellPadding="0" cellSpacing="0" role="presentation">
-    <tbody>
-      <tr>
-        <td>
-          <div><!--[if mso | IE]>
-            <table role="presentation" width="100%" align="center" style="max-width:600px;margin:0 auto;"><tr><td></td><td style="width:37.5em;background:#ffffff">
-          <![endif]--></div>
-          <div style="max-width:600px;margin:0 auto">
-            <table style="width:100%;margin-top:32px" align="center" border="0" cellPadding="0" cellSpacing="0" role="presentation">
-              <tbody>
-                <tr>
-                  <td><img alt="Rooton" src="https://i.postimg.cc/wMn5hJ9g/rooton.png" width="auto" height="50" style="display:block;outline:none;border:none;text-decoration:none" /></td>
-                </tr>
-              </tbody>
-            </table>
-            <h1 style="color:#1d1c1d;font-size:36px;font-weight:700;margin:30px 0;padding:0;line-height:42px">Confirm your email address</h1>
-            <p style="font-size:20px;line-height:28px;margin:16px 0;margin-bottom:30px">Your confirmation code is below - enter it in your open browser window and we'll help you get signed in.</p>
-            <table style="width:100%;background:rgb(245, 244, 245);border-radius:4px;margin-right:50px;margin-bottom:30px;padding:43px 23px" align="center" border="0" cellPadding="0" cellSpacing="0" role="presentation">
-              <tbody>
-                <tr>
-                  <td>
-                    <p style="font-size:30px;line-height:24px;margin:16px 0;text-align:center;vertical-align:middle">{0}</p>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <p style="font-size:14px;line-height:24px;margin:16px 0;color:#000">If you didn't request this email, there's nothing to worry about - you can safely ignore it.</p>
-            <table style="margin-bottom:32px;width:100%" border="0" cellPadding="0" cellSpacing="10" align="left">
-              <tr>
-                <td align="left" valign="top"><img alt="Rooton" src="https://i.postimg.cc/wMn5hJ9g/rooton.png" width="auto" height="50" style="display:block;outline:none;border:none;text-decoration:none" /></td>
-                <td align="right" valign="top"><a target="_blank" style="color:#067df7;text-decoration:none" href="https://www.facebook.com/pg/rooton/"><img alt="Rooton" src="https://cdn-icons-png.flaticon.com/512/739/739237.png" width="32" height="32" style="display:inline;outline:none;border:none;text-decoration:none;margin-left:32px" /></a><a target="_blank" style="color:#067df7;text-decoration:none" href="https://instagram.com/rootonofficial"><img alt="Slack" src="https://cdn-icons-png.flaticon.com/512/87/87390.png" width="32" height="32" style="display:inline;outline:none;border:none;text-decoration:none;margin-left:32px" /></a><a target="_blank" style="color:#067df7;text-decoration:none" href="https://www.linkedin.com/in/ronak-patel-rcic/"><img alt="Rooton" src="https://cdn-icons-png.flaticon.com/512/220/220343.png" width="32" height="32" style="display:inline;outline:none;border:none;text-decoration:none;margin-left:32px" /></a></td>
-              </tr>
-            </table>
-            <table style="width:100%;font-size:12px;color:#b7b7b7;line-height:15px;text-align:left;margin-bottom:50px" align="center" border="0" cellPadding="0" cellSpacing="0" role="presentation">
-              <tbody>
-                <tr>
-                  <td><a target="_blank" style="color:#b7b7b7;text-decoration:underline" href="https://rooton.ca/immigration-insights" rel="noopener noreferrer">Our blog</a>   |   <a target="_blank" style="color:#b7b7b7;text-decoration:underline" href="https://rooton.ca/privacy-policy" rel="noopener noreferrer">Policies</a>   |   <a target="_blank" style="color:#b7b7b7;text-decoration:underline" href="https://rooton.ca/disclaimer" rel="noopener noreferrer">Disclaimer</a>   |   <a target="_blank" style="color:#b7b7b7;text-decoration:underline" href="https://rooton.ca/terms-and-conditions" rel="noopener noreferrer" data-auth="NotApplicable" data-linkindex="6">Terms & Conditions</a>
-                    <p style="font-size:12px;line-height:15px;margin:16px 0;color:#b7b7b7;text-align:left;margin-bottom:10px">Copyright © 2024 Root On Immigration Consultants, Inc. or its affiliates.<br />706-1800, Blvd, Rene-Levesque Ouest,<br /> Montreal Quebec, H3H 2H2. <br /><p style="margin-block:6px">All Rights Reserved.</p></p>
-                    <p style="font-size:12px;line-height:1px;margin:16px 0;color:#b7b7b7;text-align:left;margin-bottom:50px"><br />{1}</p>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div><!--[if mso | IE]>
-          </td><td></td></tr></table>
-          <![endif]--></div>
-        </td>
-      </tr>
-    </tbody>
-  </table>
-</html>
-""".format(
-            OTP, datetime.datetime.now()
-        ),
-        "html",
-    )
-    msgAlternative.attach(msgText)
-
-    em["From"] = email_sender
-    em["To"] = email_receiver
-    em["Subject"] = subject
-    em.set_content(Body)
-
-    context = ssl.create_default_context()
-
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as smtp:
-        smtp.login(email_sender, email_password)
-        smtp.sendmail(email_sender, email_receiver, msgRoot.as_string())
-
-    return OTP
-
-
 def is_email_present(email: str) -> bool:
     """Check if the email is already in the database."""
     database_name = "test"
@@ -735,8 +651,7 @@ def is_email_present(email: str) -> bool:
     results = perform_database_operation(database_name, collection_name, "read", query)
     return len(results) > 0
 
-
-def email_verification1(receiver_emailID, auth_id):
+def email_verification(receiver_emailID, auth_id):
     email_sender = os.getenv("EMAIL")
     email_password = os.getenv("EMAIL_PSK")
     URLINTI = os.getenv("URLINTI")
@@ -827,7 +742,7 @@ def email_verification1(receiver_emailID, auth_id):
   </table>
 </html>
 """.format(
-            OTP, datetime.datetime.now()
+            OTP, datetime.now()
         ),
         "html",
     )
@@ -848,11 +763,25 @@ def email_verification1(receiver_emailID, auth_id):
 @app.post("/api/send-otp")
 def send_otp(request: EmailRequest):
     try:
-        if is_email_present(request.email):
+        if request.Second:
+            auth_id = secrets.token_hex(40)
+            email_verification(request.email, auth_id)
+            perform_database_operation(
+                "test",
+                "users",
+                "update",
+                {"email": request.email},
+                {"authId": auth_id}
+            )
+            return {
+                "Status": "Success",
+                "Message": "Email Verification Mail Resent Into Your Mailbox",
+            }
+        elif is_email_present(request.email):
             return {"Status": "Present", "Message": "Email already exists"}
         else:
             auth_id = secrets.token_hex(40)
-            email_verification1(request.email, auth_id)
+            email_verification(request.email, auth_id)
             hashed_password = bcrypt.hashpw(
                 request.Password.encode("utf-8"), bcrypt.gensalt(10)
             )
@@ -872,11 +801,10 @@ def send_otp(request: EmailRequest):
             )
             return {
                 "Status": "Success",
-                "Message": "Verifiaction Mail Sent Into Your Mailbox",
+                "Message": "Email Verification Mail Sent Into Your Mailbox",
             }
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Error sending email")
-
+        raise HTTPException(status_code=500, detail="Error sending email", err=str(e))
 
 @app.post("/api/verification")
 def verification(request: AuthRequest):
@@ -901,6 +829,42 @@ def verification(request: AuthRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail="Verfication Failed")
 
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+# Function to create a refresh token
+def create_refresh_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(days=7)  # refresh tokens usually have a long expiry time
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+@app.post("/api/token/refresh")
+def refresh_token(refresh_token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "refresh":
+            raise credentials_exception
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+        new_access_token = create_access_token(data={"sub": email})
+        return {"access_token": new_access_token, "token_type": "bearer"}
+    except JWTError:
+        raise credentials_exception
 
 @app.post("/api/login")
 def login(request: LoginRequest):
@@ -916,11 +880,19 @@ def login(request: LoginRequest):
             # Check if the user is verified
             if user_data.get("verified"):
                 # Verify the password
-                if bcrypt.checkpw(
-                    request.Password.encode("utf-8"),
-                    user_data["Password"].encode("utf-8"),
-                ):
-                    return {"Status": "Success", "Message": "Login successful."}
+                if bcrypt.checkpw(request.Password.encode("utf-8"), user_data["Password"].encode("utf-8")):
+                    
+                    # Create token data payload
+                    token_data = {"sub": user_data["email"]}
+                    refresh_token_data = {"sub": user_data["email"], "type": "refresh"}
+                    
+                    # Set the token to expire in 60 minutes
+                    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+
+                    # Generate the JWT token
+                    access_token = create_access_token(data=token_data, expires_delta=access_token_expires)
+                    refresh_token = create_refresh_token(data=refresh_token_data)
+                    return {"access_token": access_token,"refresh_token": refresh_token, "token_type": "bearer"}
                 else:
                     raise HTTPException(status_code=401, detail="Invalid password")
             else:
@@ -953,7 +925,6 @@ def visa_pr_prob(request: CourseRequest):
         return visa_pr_prob(request.fos, request.level, request.email)
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error processing request")
-
 
 if __name__ == "__main__":
     import uvicorn
