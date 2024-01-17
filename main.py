@@ -765,18 +765,22 @@ def send_otp(request: EmailRequest):
     try:
         if request.Second:
             auth_id = secrets.token_hex(40)
-            email_verification(request.email, auth_id)
-            perform_database_operation(
-                "test",
-                "users",
-                "update",
-                {"email": request.email},
-                {"authId": auth_id}
-            )
-            return {
-                "Status": "Success",
-                "Message": "Email Verification Mail Resent Into Your Mailbox",
-            }
+            users = perform_database_operation("test", "users", "read", {"email": request.email})
+            # Check if any user is found
+            if users and len(users) > 0:
+                user_data = users[0]  # Get the first record
+                # Check if the user is verified
+                if user_data.get("verified"):
+                    return {"Status": "Verified", "Message": "The email address '{request.email}' is already verified."}
+                else:
+                    email_verification(request.email, auth_id)
+                    perform_database_operation("test","users","update",{"email": request.email},{"authId": auth_id})
+                    return {
+                        "Status": "Success",
+                        "Message": "Email Verification Mail Resent Into Your Mailbox",
+                    }
+            else:
+                return {"Status": "Error", "Message": "User not found"}   
         elif is_email_present(request.email):
             return {"Status": "Present", "Message": "Email already exists"}
         else:
