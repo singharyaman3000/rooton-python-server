@@ -771,7 +771,7 @@ def send_otp(request: EmailRequest):
                 user_data = users[0]  # Get the first record
                 # Check if the user is verified
                 if user_data.get("verified"):
-                    return {"Status": "Verified", "Message": "The email address '{request.email}' is already verified."}
+                    return {"Status": "Verified", "Message": f"The email address '{request.email}' is already verified."}
                 else:
                     email_verification(request.email, auth_id)
                     perform_database_operation("test","users","update",{"email": request.email},{"authId": auth_id})
