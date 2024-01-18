@@ -152,7 +152,7 @@ def perform_database_operation(database, collection_name, operation_type, query=
                 break
 
         if not domain_matched:
-            query["Role"] = "Student"
+            query["Role"] = "User"
         result = collection.insert_one(query)
         client.close()
         return result.inserted_id  # Return the _id of the inserted document
@@ -200,8 +200,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: Optional[str] = payload.get("sub")
+        email: Optional[str] = payload.get("Email")
+        type: Optional[str] = payload.get("type")
         if email is None:
+            raise credentials_exception
+        if type=="refresh":
             raise credentials_exception
         # You could add more user verification here if needed
         return email
@@ -846,7 +849,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
 # Function to create a refresh token
 def create_refresh_token(data: dict):
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(days=7)  # refresh tokens usually have a long expiry time
+    expire = datetime.utcnow() + timedelta(days=1)  # refresh tokens usually have a long expiry time
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -862,10 +865,11 @@ def refresh_token(refresh_token: str = Depends(oauth2_scheme)):
         payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
         if payload.get("type") != "refresh":
             raise credentials_exception
-        email: str = payload.get("sub")
+        email: str = payload.get("Email")
         if email is None:
             raise credentials_exception
-        new_access_token = create_access_token(data={"sub": email})
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        new_access_token = create_access_token(data={"Email": email,"FirstName": payload.get("FirstName", ""),"LastName": payload.get("LastName", "")},expires_delta=access_token_expires)
         return {"access_token": new_access_token, "token_type": "bearer"}
     except JWTError:
         raise credentials_exception
@@ -887,8 +891,10 @@ def login(request: LoginRequest):
                 if bcrypt.checkpw(request.Password.encode("utf-8"), user_data["Password"].encode("utf-8")):
                     
                     # Create token data payload
-                    token_data = {"sub": user_data["email"]}
-                    refresh_token_data = {"sub": user_data["email"], "type": "refresh"}
+                    token_data = {"Email": user_data["email"], "FirstName": user_data.get("Firstname", ""),
+                        "LastName": user_data.get("Lastname", "")}
+                    refresh_token_data = {"Email": user_data["email"],"FirstName": user_data.get("Firstname", ""),
+                        "LastName": user_data.get("Lastname", ""), "type": "refresh"}
                     
                     # Set the token to expire in 60 minutes
                     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -914,7 +920,7 @@ def login(request: LoginRequest):
 
 
 @app.post("/api/visa-pr-prob", response_model=CourseResponse)
-def visa_pr_prob(request: CourseRequest):
+def visa_pr_prob(request: CourseRequest, email: str = Depends(get_current_user)):
     try:
         # Call your visa_pr_prob function here
         messages = [
