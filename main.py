@@ -201,10 +201,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: Optional[str] = payload.get("Email")
-        type: Optional[str] = payload.get("type")
-        if email is None:
-            raise credentials_exception
-        if type=="refresh":
+        token_type: Optional[str] = payload.get("type")
+        if email is None or token_type != "access":
             raise credentials_exception
         # You could add more user verification here if needed
         return email
@@ -869,7 +867,7 @@ def refresh_token(refresh_token: str = Depends(oauth2_scheme)):
         if email is None:
             raise credentials_exception
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        new_access_token = create_access_token(data={"Email": email,"FirstName": payload.get("FirstName", ""),"LastName": payload.get("LastName", "")},expires_delta=access_token_expires)
+        new_access_token = create_access_token(data={"Email": email,"FirstName": payload.get("FirstName", ""),"LastName": payload.get("LastName", ""), "type": "access"},expires_delta=access_token_expires)
         return {"access_token": new_access_token, "token_type": "bearer"}
     except JWTError:
         raise credentials_exception
@@ -892,7 +890,7 @@ def login(request: LoginRequest):
                     
                     # Create token data payload
                     token_data = {"Email": user_data["email"], "FirstName": user_data.get("Firstname", ""),
-                        "LastName": user_data.get("Lastname", "")}
+                        "LastName": user_data.get("Lastname", ""), "type": "access"}
                     refresh_token_data = {"Email": user_data["email"],"FirstName": user_data.get("Firstname", ""),
                         "LastName": user_data.get("Lastname", ""), "type": "refresh"}
                     
