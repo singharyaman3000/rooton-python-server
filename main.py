@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 import pandas as pd
+import logging
 import pymongo
 import os
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -11,6 +12,7 @@ from sklearn.metrics import pairwise as sk
 import json
 import re
 import openai
+import authlib
 import time
 from cachetools import TTLCache, cached
 import math as m
@@ -27,6 +29,10 @@ import bcrypt
 from bson import ObjectId
 from jose import JWTError, jwt
 from fastapi import Security
+from starlette.requests import Request
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import HTMLResponse, RedirectResponse
+from authlib.integrations.starlette_client import OAuth, OAuthError
 
 
 load_dotenv()
@@ -46,6 +52,7 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
+app.add_middleware(SessionMiddleware, secret_key=os.getenv("Session_SECRET_KEY"))
 
 # Pydantic models for request and response
 class CourseRequest(BaseModel):
@@ -191,6 +198,80 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60  # the expiration time for the token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+oauth = OAuth()
+oauth.register(
+    name='google',
+    client_id=os.getenv("GOOGLE_CLIENT_ID"),
+    client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+    # Adding this line to use the OIDC discovery document
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={'scope': 'openid email profile'},
+)
+
+@app.get("/api/login/google")
+async def login_google(request: Request):
+    # The state is saved in the session in this call by default
+    redirect_uri = request.url_for('authorize_google')
+    return await oauth.google.authorize_redirect(request, redirect_uri)
+
+@app.get('/api/authorize/google')
+async def authorize_google(request: Request):
+    try:
+        # Authlib checks the state parameter against the session automatically
+        token = await oauth.google.authorize_access_token(request)
+        # If we get here, the state check has passed
+        user_data = token.get('userinfo')
+        # Handle user login or registration here
+        users = perform_database_operation(
+            "test", "users", "read", {"email": user_data["email"]}
+        )
+
+        # Check if any user is found
+        if users and len(users) > 0:
+            token_data = {"Email": user_data["email"], "FirstName": user_data.get("given_name", ""),
+                "LastName": user_data.get("family_name", ""), "type": "access"}
+            refresh_token_data = {"Email": user_data["email"],"FirstName": user_data.get("Firstname", ""),
+            "LastName": user_data.get("Lastname", ""), "type": "refresh"}
+            # Set the token to expire in 60 minutes
+            access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+            # Generate the JWT token
+            access_token = create_access_token(data=token_data, expires_delta=access_token_expires)
+            refresh_token = create_refresh_token(data=refresh_token_data)
+            return {"access_token": access_token,"refresh_token": refresh_token, "token_type": "bearer"}
+        else:
+            perform_database_operation(
+                "test",
+                "users",
+                "create",
+                {
+                    "email": user_data["email"],
+                    "Firstname": user_data.get("given_name", ""),
+                    "Lastname": user_data.get("family_name", ""),
+                    "Phone": "",
+                    "Password": "",
+                    "verified": True,
+                    # "authId": auth_id,
+                },
+            )
+            token_data = {"Email": user_data["email"], "FirstName": user_data.get("given_name", ""),
+                "LastName": user_data.get("family_name", ""), "type": "access"}
+            refresh_token_data = {"Email": user_data["email"],"FirstName": user_data.get("Firstname", ""),
+            "LastName": user_data.get("Lastname", ""), "type": "refresh"}
+            # Set the token to expire in 60 minutes
+            access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+            # Generate the JWT token
+            access_token = create_access_token(data=token_data, expires_delta=access_token_expires)
+            refresh_token = create_refresh_token(data=refresh_token_data)
+            return {"access_token": access_token,"refresh_token": refresh_token, "token_type": "bearer"}
+
+    except authlib.integrations.base_client.errors.MismatchingStateError:
+        # The state parameter does not match the session state
+        raise HTTPException(status_code=400, detail="State mismatch error. Possible CSRF attack.")
+    except Exception as e:
+        # Log the error and return a generic error response to the user
+        logging.exception("An error occurred during the OAuth callback.")
+        raise HTTPException(status_code=500, detail="An internal server error occurred.", err=str(e))
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
     credentials_exception = HTTPException(
