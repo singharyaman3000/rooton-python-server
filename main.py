@@ -31,7 +31,7 @@ from jose import JWTError, jwt
 from fastapi import Security
 from starlette.requests import Request
 from starlette.middleware.sessions import SessionMiddleware
-from starlette.responses import HTMLResponse, RedirectResponse
+from starlette.responses import JSONResponse, RedirectResponse
 from authlib.integrations.starlette_client import OAuth, OAuthError
 
 
@@ -42,6 +42,7 @@ cache = TTLCache(maxsize=1000000, ttl=86400)
 app = FastAPI()
 
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+FRONTEND_URL = os.getenv("FRONTEND_URL")
 
 # Configure CORS
 app.add_middleware(
@@ -100,7 +101,7 @@ def fetch_all_data(database, collection):
     try:
         for document in cursor:
             counter += 1
-            print(counter)
+            # print(counter)
             results.append(document)
     finally:
         cursor.close()
@@ -213,7 +214,9 @@ oauth.register(
 async def login_google(request: Request):
     # The state is saved in the session in this call by default
     redirect_uri = request.url_for('authorize_google')
+    # print(redirect_uri)
     return await oauth.google.authorize_redirect(request, redirect_uri)
+
 
 @app.get('/api/authorize/google')
 async def authorize_google(request: Request):
@@ -222,48 +225,57 @@ async def authorize_google(request: Request):
         token = await oauth.google.authorize_access_token(request)
         # If we get here, the state check has passed
         user_data = token.get('userinfo')
+        if user_data:
         # Handle user login or registration here
-        users = perform_database_operation(
-            "test", "users", "read", {"email": user_data["email"]}
-        )
-
-        # Check if any user is found
-        if users and len(users) > 0:
-            token_data = {"Email": user_data["email"], "FirstName": user_data.get("given_name", ""),
-                "LastName": user_data.get("family_name", ""), "type": "access"}
-            refresh_token_data = {"Email": user_data["email"],"FirstName": user_data.get("Firstname", ""),
-            "LastName": user_data.get("Lastname", ""), "type": "refresh"}
-            # Set the token to expire in 60 minutes
-            access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-            # Generate the JWT token
-            access_token = create_access_token(data=token_data, expires_delta=access_token_expires)
-            refresh_token = create_refresh_token(data=refresh_token_data)
-            return {"access_token": access_token,"refresh_token": refresh_token, "token_type": "bearer"}
-        else:
-            perform_database_operation(
-                "test",
-                "users",
-                "create",
-                {
-                    "email": user_data["email"],
-                    "Firstname": user_data.get("given_name", ""),
-                    "Lastname": user_data.get("family_name", ""),
-                    "Phone": "",
-                    "Password": "",
-                    "verified": True,
-                    # "authId": auth_id,
-                },
+            users = perform_database_operation(
+                "test", "users", "read", {"email": user_data["email"]}
             )
-            token_data = {"Email": user_data["email"], "FirstName": user_data.get("given_name", ""),
-                "LastName": user_data.get("family_name", ""), "type": "access"}
-            refresh_token_data = {"Email": user_data["email"],"FirstName": user_data.get("Firstname", ""),
-            "LastName": user_data.get("Lastname", ""), "type": "refresh"}
-            # Set the token to expire in 60 minutes
-            access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-            # Generate the JWT token
-            access_token = create_access_token(data=token_data, expires_delta=access_token_expires)
-            refresh_token = create_refresh_token(data=refresh_token_data)
-            return {"access_token": access_token,"refresh_token": refresh_token, "token_type": "bearer"}
+
+            # Check if any user is found
+            if users and len(users) > 0:
+                token_data = {"Email": user_data["email"], "FirstName": user_data.get("given_name", ""),
+                    "LastName": user_data.get("family_name", ""), "type": "access"}
+                refresh_token_data = {"Email": user_data["email"],"FirstName": user_data.get("Firstname", ""),
+                "LastName": user_data.get("Lastname", ""), "type": "refresh"}
+                # Set the token to expire in 60 minutes
+                access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+                response_token_expires = timedelta(minutes=1)
+                # Generate the JWT token
+                access_token = create_access_token(data=token_data, expires_delta=access_token_expires)
+                refresh_token = create_refresh_token(data=refresh_token_data)
+                return_token = create_access_token(data={"access_token": access_token,"refresh_token": refresh_token, "token_type": "bearer"}, expires_delta=response_token_expires)
+                # Create a query string with the token data
+                return RedirectResponse(url=FRONTEND_URL + "/googleauth?token=" + return_token)
+            else:
+                perform_database_operation(
+                    "test",
+                    "users",
+                    "create",
+                    {
+                        "email": user_data["email"],
+                        "Firstname": user_data.get("given_name", ""),
+                        "Lastname": user_data.get("family_name", ""),
+                        "Phone": "",
+                        "Password": "",
+                        "verified": True,
+                        # "authId": auth_id,
+                    },
+                )
+                token_data = {"Email": user_data["email"], "FirstName": user_data.get("given_name", ""),
+                    "LastName": user_data.get("family_name", ""), "type": "access"}
+                refresh_token_data = {"Email": user_data["email"],"FirstName": user_data.get("Firstname", ""),
+                "LastName": user_data.get("Lastname", ""), "type": "refresh"}
+                # Set the token to expire in 60 minutes
+                access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+                # Generate the JWT token
+                access_token = create_access_token(data=token_data, expires_delta=access_token_expires)
+                refresh_token = create_refresh_token(data=refresh_token_data)
+                response_token_expires = timedelta(minutes=1)
+                return_token = create_access_token(data={"access_token": access_token,"refresh_token": refresh_token, "token_type": "bearer"}, expires_delta=response_token_expires)
+                # Create a query string with the token data
+                return RedirectResponse(url=FRONTEND_URL + "/googleauth?token=" + return_token)
+        else:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
 
     except authlib.integrations.base_client.errors.MismatchingStateError:
         # The state parameter does not match the session state
@@ -736,11 +748,11 @@ def is_email_present(email: str) -> bool:
 def email_verification(receiver_emailID, auth_id):
     email_sender = os.getenv("EMAIL")
     email_password = os.getenv("EMAIL_PSK")
-    URLINTI = os.getenv("URLINTI")
+    URLINTI = FRONTEND_URL
     email_receiver = receiver_emailID
     subject = "Email Verification"
 
-    OTP = f"{URLINTI}/ver-email?authId={auth_id}"
+    OTP = f"{URLINTI}/verification-email?authId={auth_id}"
 
     Body = """
         Welcome to Root-on!
