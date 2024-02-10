@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
@@ -62,6 +62,19 @@ class CourseRequest(BaseModel):
     dictionary: dict
     email: str
 
+class VisaPRRequest(BaseModel):
+    email: str
+    dictionary: dict
+    ask: str
+
+class PromptItem(BaseModel):
+    role: str
+    content: str
+
+class SOPSOWPRequest(BaseModel):
+    prompt: List[PromptItem]
+    maxtoken: int 
+    model: str
 
 class CourseResponse(BaseModel):
     data: dict
@@ -218,7 +231,7 @@ async def login_google(request: Request):
         # Handle the case where referer is missing
         # You can raise an HTTPException or handle it in another appropriate way
         raise HTTPException(status_code=403, detail="Access denied")
-
+    
     # Normalizing the referer by stripping the trailing slash if it exists
     normalized_referer = referer.rstrip('/')
     # Check if the referer is from the allowed origins
@@ -324,11 +337,11 @@ def process_budget(budget_str):
     return lower_limit, upper_limit
 
 
-def GPTfunction(messages, max_tokens_count=350, text=False):
+def GPTfunction(messages, max_tokens_count=350, text=False, usedmodel="gpt-4"):
     openai.api_key = os.getenv("OPEN_AI_KEY")
     if text:
         response = openai.Completion.create(
-            model="gpt-3.5-turbo-instruct",
+            model=usedmodel,
             prompt=messages,
             temperature=0.7,
             max_tokens=max_tokens_count,
@@ -338,7 +351,7 @@ def GPTfunction(messages, max_tokens_count=350, text=False):
         return message
     else:
         response = openai.ChatCompletion.create(
-            model="gpt-4",
+            model=usedmodel,
             messages=messages,
             # temperature=0.7,
             max_tokens=max_tokens_count,
@@ -576,7 +589,7 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         + " that are available at Canadian universities or colleges, including a mix of undergraduate, postgraduate, and certification programs if applicable."
     )
 
-    selected_fos = GPTfunction(messages, text=True) + " " + selected_fos
+    selected_fos = GPTfunction(messages, text=True, usedmodel="gpt-3.5-turbo-instruct") + " " + selected_fos
 
     title = selected_fos
     x = title.replace(",", " ")
@@ -699,8 +712,6 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
             "GMAT",
             "City",
             "Province",
-            "Visa Chances",
-            "PR",
         ]
     )
     noteligible = noteligible.reindex(
@@ -1022,22 +1033,63 @@ def login(request: LoginRequest):
         raise HTTPException(status_code=500, detail=f"Login Failed: {e}")
 
 
-@app.post("/api/visa-pr-prob", response_model=CourseResponse)
-def visa_pr_prob(request: CourseRequest, email: str = Depends(get_current_user)):
+@app.post("/api/visa-pr-prob")
+def visa_pr_prob(request: VisaPRRequest, email: str = Depends(get_current_user)):
     try:
-        # Call your visa_pr_prob function here
-        messages = [
-            {
-                "role": "system",
-                "content": "Generate a list of 18 courses related to "
-                " that are available at Canadian universities or colleges, including a mix of undergraduate, postgraduate, and certification programs if applicable.",
-            },
-            {"role": "user", "content": "I'm interested in" + request},
-        ]
-
-        return visa_pr_prob(request.fos, request.level, request.email)
+        users = perform_database_operation(
+            "test", "userdetails", "read", {"email": request.email}
+        )
+        if users and len(users) > 0:
+            user_data = users[0]  # Get the first record
+            # Check if the user is verified
+            stringUser = str(user_data)
+            stringCourse = str(request.dictionary)
+            if user_data:
+                if request.ask == "Visa":
+                    messages = [{
+                    "role": "system",
+                    "content": "Based on the provided user profile and course details, assess the chances of obtaining a Canadian Visa for the user. Consider factors such as the user's academic background, test scores, work experience, and chosen program of study. The course and user profile data are dynamic and should be evaluated in the context of current immigration policies and program requirements. ALWAYS REMEMBER you have to answer only in single word Low, Medium, Also provide reason in two lines only"
+                    },
+                    {
+                    "role": "user",
+                    "content": "Given the course details: "+stringCourse+" and my profile: "+stringUser+" , what are my chances of getting a Canadian Visa?"
+                            }]
+                    result = GPTfunction(messages, text=False)
+                    request.dictionary["Visa Chances"] = result
+                    return {"Status": "Success", "Message": request.dictionary}
+                    
+                elif request.ask == "PR":
+                    messages = [{
+                    "role": "system",
+                    "content": "Based on the provided user profile and course details, assess the chances of obtaining a Canadian PR for the user. Consider factors such as the user's academic background, test scores, work experience, and chosen program of study. The course and user profile data are dynamic and should be evaluated in the context of current immigration policies and program requirements. ALWAYS REMEMBER you have to answer only in single word High, Medium, or Low, Not even a single word extra."
+                    },
+                    {
+                    "role": "user",
+                    "content": "Given the course details: "+stringCourse+" and my profile: "+stringUser+" , what are my chances of getting a Canadian PR?"
+                            }]
+                    result = GPTfunction(messages, text=False)
+                    return {"Status": "Success", "Message": result}
+                else:
+                    raise HTTPException(status_code=400, detail="Invalid request")
+            else:
+                raise HTTPException(status_code=403, detail="Complete your user profile first")
+            
+    except HTTPException as http_exc:
+        # If it's an HTTPException, we just re-raise it
+        # This is assuming HTTPException is meant to be used for HTTP status-related errors
+        raise http_exc
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Error processing request")
+        raise HTTPException(status_code=500, detail=f"Error processing request : {e}")
+
+@app.post("/api/sop-sowp-builder")
+def sop_sowp_builder(request: SOPSOWPRequest, email: str = Depends(get_current_user)):
+    try:
+        messages = [{"role": item.role, "content": item.content} for item in request.prompt]
+        result = GPTfunction(messages, usedmodel=request.model, max_tokens_count=request.maxtoken)
+        return {"Status": "Success", "Letter": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing request : {e}")
+
 
 if __name__ == "__main__":
     import uvicorn
