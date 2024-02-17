@@ -61,6 +61,8 @@ class CourseRequest(BaseModel):
     level: str
     dictionary: dict
     email: str
+    LanguageProficiency:str
+    Score:float
 
 class VisaPRRequest(BaseModel):
     email: str
@@ -98,6 +100,19 @@ class LoginRequest(BaseModel):
     email: str
     Password: str
 
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, ObjectId):
+            return str(obj)
+        # Let the base class default method raise the TypeError
+        return json.JSONEncoder.default(self, obj)
+    
+class ProfileInfoRequest(BaseModel):
+    email: str
+    profileInfo: dict
+
+class ProfileInfoResponse(BaseModel):
+    responsedata: dict
 
 # Function to fetch all data (similar to your script)
 @cached(cache)
@@ -142,7 +157,8 @@ def perform_database_operation(database, collection_name, operation_type, query=
             raise ValueError(
                 "Both query and update_data must be provided for update operation."
             )
-
+        # Silently remove email from update_data if present to prevent email changes
+        update_data.pop("email", None)
         # Prepare update operations
         update_operations = {}
         if "unset" in update_data:
@@ -159,6 +175,8 @@ def perform_database_operation(database, collection_name, operation_type, query=
     elif operation_type == "create":
         if query is None:
             raise ValueError("query must be provided for create operation.")
+        # Ensure email uniqueness at the collection level
+        collection.create_index([("email", pymongo.ASCENDING)], unique=True)
         # List of allowed email domains
         allowed_domains = ["rooton.ca"]  # Add more domains as needed
 
@@ -286,6 +304,19 @@ async def authorize_google(request: Request):
                         # "authId": auth_id,
                     },
                 )
+                perform_database_operation(
+                    "test",
+                    "userdetails",
+                    "create",
+                    {
+                        "email": user_data["email"],
+                        "Firstname": user_data.get("given_name", ""),
+                        "Lastname": user_data.get("family_name", ""),
+                        "Phone": "",
+                        "profileFilled": False,
+                        # "authId": auth_id,
+                    },
+                )
                 token_data = {"Email": user_data["email"], "FirstName": user_data.get("given_name", ""),
                     "LastName": user_data.get("family_name", ""), "type": "access"}
                 refresh_token_data = {"Email": user_data["email"],"FirstName": user_data.get("Firstname", ""),
@@ -313,7 +344,7 @@ async def authorize_google(request: Request):
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        detail="Unauthorized",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
@@ -444,18 +475,57 @@ def priorty(dataframe, dictionary, selected_fos):
     return final_finalResult
 
 
-def calibre_checker(df, Imarks):
-    noteligible = pd.DataFrame(columns=df.columns)
+# def calibre_checker(df, Imarks):
+#     noteligible = pd.DataFrame(columns=df.columns)
 
-    # Iterate through each row of the original DataFrame
-    for index, row in df.iterrows():
-        # Check if the condition is satisfied
-        if row["IeltsOverall"] > Imarks:
-            # If not satisfied, drop the row and append it to the dropped DataFrame
-            noteligible = pd.concat([noteligible, row.to_frame().T], ignore_index=True)
-            df.drop(index, inplace=True)
-    return df, noteligible
+#     # Iterate through each row of the original DataFrame
+#     for index, row in df.iterrows():
+#         # Check if the condition is satisfied
+#         if row["IeltsOverall"] > Imarks:
+#             # If not satisfied, drop the row and append it to the dropped DataFrame
+#             noteligible = pd.concat([noteligible, row.to_frame().T], ignore_index=True)
+#             df.drop(index, inplace=True)
+#     return df, noteligible
 
+def calibre_checker(df: pd.DataFrame, language_proficiency, my_marks):
+    try:
+        noteligible = pd.DataFrame(columns=df.columns)
+        # print("Duplicates in original df:", df.duplicated().sum())
+        df = df.drop_duplicates()
+        df = df.reset_index(drop=True)
+
+
+        # Mapping of language proficiency tests to their respective column names in the DataFrame
+        proficiency_column_mapping = {
+            "IELTS": "IeltsOverall",
+            "Duolingo": "DuolingoOverall",
+            "PTE": "PteOverall",
+            "GMAT": "GMAT",
+            "GRE": "GRE",
+            "TOEFL": "TOEFLOverall"
+        }
+        # print("Intial --> ",len(df))
+        # Determine the column to use for comparison based on the language proficiency provided
+        score_column = proficiency_column_mapping.get(language_proficiency, "IeltsOverall")  # Default to IELTS if not found
+        # Create a mask to filter eligible and not eligible entries
+        # Note: Changed the logic to correctly identify not eligible entries (scores below my_marks)
+        not_eligible_mask = df[score_column].isnull() | (df[score_column] > my_marks)
+        
+        # Filter based on the mask
+        noteligible = df[not_eligible_mask]
+        eligible = df[~not_eligible_mask]
+        # print(df[~df.index.isin(noteligible.index)])
+        
+        # print("Eligibile --> ",len(eligible))
+        # print("Not Eligible --> ",len(noteligible))
+
+        # print("Duplicates in eligible:", eligible.duplicated().sum())
+        # print("Duplicates in noteligible:", noteligible.duplicated().sum())
+
+
+        return eligible, noteligible
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing request : {e}")
 
 def cleandict(my_dict):
     for key in list(my_dict.keys()):
@@ -529,236 +599,252 @@ def core_model(fos, level, college_df):
 
 @app.post("/api/recommend_courses", response_model=CourseResponse)
 async def recommend_courses(request: CourseRequest, email: str = Depends(get_current_user)):
-    # print("recieved Request", request)
-    start = time.time()
-    my_dict = request.dictionary
-    received_dictionary = {}
-    for key in my_dict:
-        new_key = key
-        if key == "FieldOfStudy":
-            new_key = "Title"
-        elif key == "Budget":
-            new_key = "Fee"
-        elif key == "Duration":
-            new_key = "Length"
-        elif key == "Intake":
-            new_key = "Seasons"
-        received_dictionary[new_key] = my_dict[key]
-    received_dictionary["Length"] = int(received_dictionary.get("Length", 0) or 0)
-    if received_dictionary["Fee"] == "":
-        received_dictionary["Fee"] = 0
-    if received_dictionary["Fee"] != 0:
-        fee_lower, fee_max = process_budget(received_dictionary["Fee"])
-        received_dictionary["FeeLower"] = fee_lower
-        received_dictionary["FeeMax"] = fee_max
-        received_dictionary["Fee"] = int(received_dictionary["FeeMax"])
-        received_dictionary.pop("FeeMax")
-        received_dictionary.pop("FeeLower")
+    try:
+        # print("recieved Request", request)
+        start = time.time()
+        my_dict = request.dictionary
+        received_dictionary = {}
+        for key in my_dict:
+            new_key = key
+            if key == "FieldOfStudy":
+                new_key = "Title"
+            elif key == "Budget":
+                new_key = "Fee"
+            elif key == "Duration":
+                new_key = "Length"
+            elif key == "Intake":
+                new_key = "Seasons"
+            received_dictionary[new_key] = my_dict[key]
+        received_dictionary["Length"] = int(received_dictionary.get("Length", 0) or 0)
+        if received_dictionary["Fee"] == "":
+            received_dictionary["Fee"] = 0
+        if received_dictionary["Fee"] != 0:
+            fee_lower, fee_max = process_budget(received_dictionary["Fee"])
+            received_dictionary["FeeLower"] = fee_lower
+            received_dictionary["FeeMax"] = fee_max
+            received_dictionary["Fee"] = int(received_dictionary["FeeMax"])
+            received_dictionary.pop("FeeMax")
+            received_dictionary.pop("FeeLower")
 
-    received_dictionary.update(my_dict)
-    received_dictionary["Length"] = int(received_dictionary["Length"])
+        received_dictionary.update(my_dict)
+        received_dictionary["Length"] = int(received_dictionary["Length"])
 
-    received_dictionary.pop("FieldOfStudy")
-    received_dictionary.pop("Budget")
-    received_dictionary.pop("Duration")
-    received_dictionary.pop("Intake")
-    value = fetch_all_data("test", "courses")
-    college_df = pd.DataFrame(value)
-    userdetails = fetch_all_data("test", "userdetails")
-    selected_useremail = request.email
-    selected_fos = received_dictionary["Title"]
-    selected_level = received_dictionary["Level"].lower()
+        received_dictionary.pop("FieldOfStudy")
+        received_dictionary.pop("Budget")
+        received_dictionary.pop("Duration")
+        received_dictionary.pop("Intake")
+        value = fetch_all_data("test", "courses")
+        college_df = pd.DataFrame(value)
+        userdetails = perform_database_operation(
+            "test", "userdetails", "read", {"email": email}
+        )
+        selected_fos = received_dictionary["Title"]
+        selected_level = received_dictionary["Level"].lower()
 
-    if selected_fos == "":
-        response = {"Error": "Please Select A Field Of Study"}
-        # print(response)
-        exit()
-    openai.api_key = os.getenv("OPEN_AI_KEY")
-    # messages = [{
-    #     "role": "system",
-    #     "content": "Generate a list of 18 courses related to " + selected_fos + " that are available at Canadian universities or colleges, including a mix of undergraduate, postgraduate, and certification programs if applicable."
-    #     },
-    #     {
-    #     "role": "user",
-    #     "content": "I'm interested in"+ selected_fos
-    #     },]
+        if selected_fos == "":
+            response = {"Error": "Please Select A Field Of Study"}
+            raise HTTPException(status_code=500, detail=response)
+        
+        openai.api_key = os.getenv("OPEN_AI_KEY")
+        # messages = [{
+        #     "role": "system",
+        #     "content": "Generate a list of 18 courses related to " + selected_fos + " that are available at Canadian universities or colleges, including a mix of undergraduate, postgraduate, and certification programs if applicable."
+        #     },
+        #     {
+        #     "role": "user",
+        #     "content": "I'm interested in"+ selected_fos
+        #     },]
 
-    messages = (
-        "Generate a list of 18 courses related to "
-        + selected_fos
-        + " that are available at Canadian universities or colleges, including a mix of undergraduate, postgraduate, and certification programs if applicable."
-    )
+        messages = (
+            "Generate a list of 18 courses related to "
+            + selected_fos
+            + " that are available at Canadian universities or colleges, including a mix of undergraduate, postgraduate, and certification programs if applicable."
+        )
 
-    selected_fos = GPTfunction(messages, text=True, usedmodel="gpt-3.5-turbo-instruct") + " " + selected_fos
+        selected_fos = GPTfunction(messages, text=True, usedmodel="gpt-3.5-turbo-instruct") + " " + selected_fos
 
-    title = selected_fos
-    x = title.replace(",", " ")
-    input_words = x.split()
-    input_words = set(input_words)
+        title = selected_fos
+        x = title.replace(",", " ")
+        input_words = x.split()
+        input_words = set(input_words)
 
-    input_words = set(re.findall(r"[a-zA-Z]+", " ".join(input_words)))
+        input_words = set(re.findall(r"[a-zA-Z]+", " ".join(input_words)))
 
-    input_words = set([w.lower() for w in input_words])
+        input_words = set([w.lower() for w in input_words])
 
-    joining_words = {"and", "or", "for", "in", "the", "of", "on", "to", "a", "an"}
-    input_words = input_words - joining_words
+        joining_words = {"and", "or", "for", "in", "the", "of", "on", "to", "a", "an"}
+        input_words = input_words - joining_words
 
-    selected_fos = input_words
-    received_dictionary["Title"] = selected_fos
+        selected_fos = input_words
+        received_dictionary["Title"] = selected_fos
 
-    received_dictionary["Level"] = received_dictionary["Level"].lower()
-    received_dictionary["Province"] = received_dictionary["Province"].lower()
-    received_dictionary["Seasons"] = received_dictionary["Seasons"].lower()
-    dictionary = received_dictionary
-    dictionary = cleandict(dictionary)
+        received_dictionary["Level"] = received_dictionary["Level"].lower()
+        received_dictionary["Province"] = received_dictionary["Province"].lower()
+        received_dictionary["Seasons"] = received_dictionary["Seasons"].lower()
+        dictionary = received_dictionary
+        dictionary = cleandict(dictionary)
 
-    selected_fos = " ".join(selected_fos)
+        selected_fos = " ".join(selected_fos)
 
-    fill = core_model(selected_fos, selected_level, college_df)
+        fill = core_model(selected_fos, selected_level, college_df)
 
-    fill["_id"] = fill["_id"].astype(str)
-    for i in range(len(fill["Intake"])):
-        for j in range(len(fill["Intake"][i])):
-            if fill["Intake"][i][j] is not None and "_id" in fill["Intake"][i][j]:
-                del fill["Intake"][i][j]["_id"]
+        fill["_id"] = fill["_id"].astype(str)
+        for i in range(len(fill["Intake"])):
+            for j in range(len(fill["Intake"][i])):
+                if fill["Intake"][i][j] is not None and "_id" in fill["Intake"][i][j]:
+                    del fill["Intake"][i][j]["_id"]
 
-    intakes = []
+        intakes = []
 
-    seasons = []
-    statuses = []
-    deadlines = []
+        seasons = []
+        statuses = []
+        deadlines = []
 
-    for d in fill["Intake"]:
-        intake = d
+        for d in fill["Intake"]:
+            intake = d
 
-        d_seasons = []
-        d_statuses = []
-        d_deadlines = []
+            d_seasons = []
+            d_statuses = []
+            d_deadlines = []
 
-        for i in intake:
-            d_seasons.append(i["season"])
-            d_statuses.append(i["status"])
-            d_deadlines.append(i["deadline"])
+            for i in intake:
+                d_seasons.append(i["season"])
+                d_statuses.append(i["status"])
+                d_deadlines.append(i["deadline"])
 
-        seasons.append(", ".join(d_seasons))
-        statuses.append(", ".join(d_statuses))
-        deadlines.append(", ".join(d_deadlines))
+            seasons.append(", ".join(d_seasons))
+            statuses.append(", ".join(d_statuses))
+            deadlines.append(", ".join(d_deadlines))
 
-    intake_df = pd.DataFrame(
-        {"Seasons": seasons, "Status": statuses, "Deadline": deadlines}
-    )
-    fill = pd.concat([fill.drop("Intake", axis=1), intake_df], axis=1)
-    if len(dictionary) == 1:
-        recommended_course_names = fill
-    else:
-        recommended_course_names = priorty(fill, dictionary, selected_fos)
+        intake_df = pd.DataFrame(
+            {"Seasons": seasons, "Status": statuses, "Deadline": deadlines}
+        )
+        fill = pd.concat([fill.drop("Intake", axis=1), intake_df], axis=1)
+        if len(dictionary) == 1:
+            recommended_course_names = fill
+        else:
+            recommended_course_names = priorty(fill, dictionary, selected_fos)
 
-    recommended_course_names.drop(
-        [
-            "__v",
-            "Language",
-            "IeltsReading",
-            "IeltsWriting",
-            "IeltsSpeaking",
-            "IeltsListening",
-            "PteReading",
-            "PteWriting",
-            "PteSpeaking",
-            "PteListening",
-            "Country",
-        ],
-        axis=1,
-        inplace=True,
-    )
+        recommended_course_names.drop(
+            [
+                "__v",
+                "Language",
+                "IeltsReading",
+                "IeltsWriting",
+                "IeltsSpeaking",
+                "IeltsListening",
+                "PteReading",
+                "PteWriting",
+                "PteSpeaking",
+                "PteListening",
+                "Country",
+            ],
+            axis=1,
+            inplace=True,
+        )
 
-    for u in userdetails:
-        if u["email"] == selected_useremail:
-            IELTS_O = u["Scores"]["IELTS"]["Overall"]
-            break
-    eligible, noteligible = calibre_checker(recommended_course_names, IELTS_O)
+        # if LanguageProficiency:
+        #     if userdetails[0]["Scores"]["IELTS"]["Overall"]:
+        #         IELTS_O = userdetails[0]["Scores"]["IELTS"]["Overall"]
+        #     else:
+                
+        #         IELTS_O = 6.5 #Conditioning is remaining...
+        # else:
+        #     IELTS_O = 6.5
+        eligible1, noteligible1 = calibre_checker(recommended_course_names, request.LanguageProficiency,request.Score)
+        
+        # print("Duplicates in eligible: 1", eligible1.duplicated().sum())
+        # print("Duplicates in noteligible: 3", noteligible1.duplicated().sum())
 
-    eligible["Length"] = eligible["Length"].apply(
-        lambda x: f"{x // 12} Year{'s' if x // 12 > 1 else ''} " + f"{x % 12} Months"
-        if x >= 12
-        else f"{x} Months"
-    )
-    noteligible["Length"] = noteligible["Length"].apply(
-        lambda x: f"{x // 12} Year{'s' if x // 12 > 1 else ''} " + f"{x % 12} Months"
-        if x >= 12
-        else f"{x} Months"
-    )
-    eligible = eligible.reindex(
-        columns=[
-            "CreatedOn",
-            "FieldOfStudy",
-            "InstituteName",
-            "Title",
-            "Level",
-            "Length",
-            "ApplicationFee",
-            "FeeText",
-            "Seasons",
-            "Status",
-            "Deadline",
-            "Percentage",
-            "Backlog",
-            "Gap",
-            "Campus",
-            "IeltsOverall",
-            "PteOverall",
-            "TOEFLOverall",
-            "DuolingoOverall",
-            "GRE",
-            "GMAT",
-            "City",
-            "Province",
-        ]
-    )
-    noteligible = noteligible.reindex(
-        columns=[
-            "CreatedOn",
-            "FieldOfStudy",
-            "InstituteName",
-            "Title",
-            "Level",
-            "Length",
-            "ApplicationFee",
-            "FeeText",
-            "Seasons",
-            "Status",
-            "Deadline",
-            "Percentage",
-            "Backlog",
-            "Gap",
-            "Campus",
-            "IeltsOverall",
-            "PteOverall",
-            "TOEFLOverall",
-            "DuolingoOverall",
-            "GRE",
-            "GMAT",
-            "City",
-            "Province",
-            "Notes",
-        ]
-    )
 
-    eligible.fillna("N/A", inplace=True)
-    eligible = eligible.head(31)
+        eligible1["Length"] = eligible1["Length"].apply(
+            lambda x: f"{x // 12} Year{'s' if x // 12 > 1 else ''} " + f"{x % 12} Months"
+            if x >= 12
+            else f"{x} Months"
+        )
+        noteligible1["Length"] = noteligible1["Length"].apply(
+            lambda x: f"{x // 12} Year{'s' if x // 12 > 1 else ''} " + f"{x % 12} Months"
+            if x >= 12
+            else f"{x} Months"
+        )
+        eligible1 = eligible1.reindex(
+            columns=[
+                "CreatedOn",
+                "FieldOfStudy",
+                "InstituteName",
+                "Title",
+                "Level",
+                "Length",
+                "ApplicationFee",
+                "FeeText",
+                "Seasons",
+                "Status",
+                "Deadline",
+                "Percentage",
+                "Backlog",
+                "Gap",
+                "Campus",
+                "IeltsOverall",
+                "PteOverall",
+                "TOEFLOverall",
+                "DuolingoOverall",
+                "GRE",
+                "GMAT",
+                "City",
+                "Province",
+            ]
+        )
+        noteligible1 = noteligible1.reindex(
+            columns=[
+                "CreatedOn",
+                "FieldOfStudy",
+                "InstituteName",
+                "Title",
+                "Level",
+                "Length",
+                "ApplicationFee",
+                "FeeText",
+                "Seasons",
+                "Status",
+                "Deadline",
+                "Percentage",
+                "Backlog",
+                "Gap",
+                "Campus",
+                "IeltsOverall",
+                "PteOverall",
+                "TOEFLOverall",
+                "DuolingoOverall",
+                "GRE",
+                "GMAT",
+                "City",
+                "Province",
+                "Notes",
+            ]
+        )
 
-    recommendData = eligible.to_dict("records")
-    end = time.time()
-    response_time = end - start
-    print(response_time)
-    # print(json_data)
+        eligible1.fillna("N/A", inplace=True)
+        eligible1 = eligible1.head(31)
 
-    return CourseResponse(
-        data={
-            "message": "Course recommendations generated successfully",
-            "recommended_courses": recommendData,
-            "response_time": response_time,
-        }
-    )
+        noteligible1.fillna("N/A", inplace=True)
+
+        recommendData = eligible1.to_dict("records")
+        end = time.time()
+        response_time = end - start
+        print(response_time)
+        # print(json_data)
+
+        return CourseResponse(
+            data={
+                "message": "Course recommendations generated successfully",
+                "eligible": recommendData,
+                "noteligible": noteligible1.to_dict("records"),
+                "response_time": response_time,
+            }
+        )
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail=f"Error processing request : {e}")
 
 def is_email_present(email: str) -> bool:
     """Check if the email is already in the database."""
@@ -941,6 +1027,19 @@ def verification(request: AuthRequest):
                 {"authId": request.authId},
                 {"unset": {"authId": ""}, "verified": True},
             )
+            perform_database_operation(
+                    "test",
+                    "userdetails",
+                    "create",
+                    {
+                        "email": result[0]['email'],
+                        "Firstname": result[0]['Firstname'],
+                        "Lastname": result[0]['Lastname'],
+                        "Phone": result[0]['Phone'],
+                        "profileFilled": False,
+                        # "authId": auth_id,
+                    },
+                )
             return {"Status": "Success", "Message": "Verification Successful"}
         else:
             return {
@@ -948,7 +1047,7 @@ def verification(request: AuthRequest):
                 "Message": "Verification Failed. User not found or already verified.",
             }
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Verfication Failed")
+        raise HTTPException(status_code=500, detail=f"Verfication Failed: {e}")
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
@@ -1032,6 +1131,44 @@ def login(request: LoginRequest):
         # For any other kind of exception, it's an internal server error
         raise HTTPException(status_code=500, detail=f"Login Failed: {e}")
 
+@app.get("/api/profile-info")
+def profile_info(email: str = Depends(get_current_user)):
+    try:
+        users = perform_database_operation(
+            "test", "userdetails", "read", {"email": email}
+        )
+        if users and len(users) > 0:
+            # Serialize the data using the custom JSON encoder and return it as a JSON response
+            json_compatible_item_data = json.loads(json.dumps(users[0], cls=CustomJSONEncoder))
+            return JSONResponse(content=json_compatible_item_data)
+        else:
+            raise HTTPException(status_code=404, detail="User not found")
+    except HTTPException as http_exc:
+        # If it's an HTTPException, we just re-raise it
+        # This is assuming HTTPException is meant to be used for HTTP status-related errors
+        raise http_exc
+    except Exception as e:
+        # For any other kind of exception, it's an internal server error
+        raise HTTPException(status_code=500, detail=f"Profile Info Failed: {e}")
+    
+@app.put("/api/update-profile-info")
+def profile_info(request: ProfileInfoRequest, email: str = Depends(get_current_user)):
+    try:
+        users = perform_database_operation(
+            "test", "userdetails", "update", {"email": email}, request.profileInfo
+        )
+        if users==1:
+            return{"Status": "Success", "Message":"Profile Info Updated" }
+        else:
+            raise HTTPException(status_code=404, detail="User not found OR There Nothing To Update")
+    except HTTPException as http_exc:
+        # If it's an HTTPException, we just re-raise it
+        # This is assuming HTTPException is meant to be used for HTTP status-related errors
+        raise http_exc
+    except Exception as e:
+        # For any other kind of exception, it's an internal server error
+        raise HTTPException(status_code=500, detail=f"Profile Info Failed: {e}")
+
 
 @app.post("/api/visa-pr-prob")
 def visa_pr_prob(request: VisaPRRequest, email: str = Depends(get_current_user)):
@@ -1068,7 +1205,8 @@ def visa_pr_prob(request: VisaPRRequest, email: str = Depends(get_current_user))
                     "content": "Given the course details: "+stringCourse+" and my profile: "+stringUser+" , what are my chances of getting a Canadian PR?"
                             }]
                     result = GPTfunction(messages, text=False)
-                    return {"Status": "Success", "Message": result}
+                    request.dictionary["PR Chances"] = result
+                    return {"Status": "Success", "Message": request.dictionary}
                 else:
                     raise HTTPException(status_code=400, detail="Invalid request")
             else:
