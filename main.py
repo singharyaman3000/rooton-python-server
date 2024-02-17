@@ -243,18 +243,18 @@ oauth.register(
 
 @app.get("/api/login/google")
 async def login_google(request: Request):
-    referer = request.headers.get("referer")
-    # Check if referer is None
-    if referer is None:
-        # Handle the case where referer is missing
-        # You can raise an HTTPException or handle it in another appropriate way
-        raise HTTPException(status_code=403, detail="Access denied")
+    # referer = request.headers.get("referer")
+    # # Check if referer is None
+    # if referer is None:
+    #     # Handle the case where referer is missing
+    #     # You can raise an HTTPException or handle it in another appropriate way
+    #     raise HTTPException(status_code=403, detail="Access denied")
     
-    # Normalizing the referer by stripping the trailing slash if it exists
-    normalized_referer = referer.rstrip('/')
-    # Check if the referer is from the allowed origins
-    if normalized_referer not in allowed_origins:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # # Normalizing the referer by stripping the trailing slash if it exists
+    # normalized_referer = referer.rstrip('/')
+    # # Check if the referer is from the allowed origins
+    # if normalized_referer not in allowed_origins:
+    #     raise HTTPException(status_code=403, detail="Access denied")
     # The state is saved in the session in this call by default
     redirect_uri = request.url_for('authorize_google')
     # print(redirect_uri)
@@ -1228,6 +1228,9 @@ def sop_sowp_builder(request: SOPSOWPRequest, email: str = Depends(get_current_u
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing request : {e}")
 
+@app.get("/")
+def root():
+    return {"message": "Hello World"}
 
 if __name__ == "__main__":
     import uvicorn
