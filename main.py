@@ -228,6 +228,7 @@ app.add_event_handler("startup", preload_cache)
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60  # the expiration time for the token
+ACCESS_TOKEN_EXPIRE_DAYS = 365*30  # the expiration time for the token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -280,8 +281,8 @@ async def authorize_google(request: Request):
                     "LastName": user_data.get("family_name", ""), "type": "access"}
                 refresh_token_data = {"Email": user_data["email"],"FirstName": user_data.get("Firstname", ""),
                 "LastName": user_data.get("Lastname", ""), "type": "refresh"}
-                # Set the token to expire in 60 minutes
-                access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+                # Set the token to expire in 30 years
+                access_token_expires = timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
                 response_token_expires = timedelta(minutes=1)
                 # Generate the JWT token
                 access_token = create_access_token(data=token_data, expires_delta=access_token_expires)
@@ -321,8 +322,8 @@ async def authorize_google(request: Request):
                     "LastName": user_data.get("family_name", ""), "type": "access"}
                 refresh_token_data = {"Email": user_data["email"],"FirstName": user_data.get("Firstname", ""),
                 "LastName": user_data.get("Lastname", ""), "type": "refresh"}
-                # Set the token to expire in 60 minutes
-                access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+                # Set the token to expire in 30 years
+                access_token_expires = timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
                 # Generate the JWT token
                 access_token = create_access_token(data=token_data, expires_delta=access_token_expires)
                 refresh_token = create_refresh_token(data=refresh_token_data)
@@ -843,7 +844,6 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
             }
         )
     except Exception as e:
-        print(e)
         raise HTTPException(status_code=500, detail=f"Error processing request : {e}")
 
 def is_email_present(email: str) -> bool:
@@ -1081,7 +1081,7 @@ def refresh_token(refresh_token: str = Depends(oauth2_scheme)):
         email: str = payload.get("Email")
         if email is None:
             raise credentials_exception
-        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_DAYS)
         new_access_token = create_access_token(data={"Email": email,"FirstName": payload.get("FirstName", ""),"LastName": payload.get("LastName", ""), "type": "access"},expires_delta=access_token_expires)
         return {"access_token": new_access_token, "token_type": "bearer"}
     except JWTError:
@@ -1110,7 +1110,7 @@ def login(request: LoginRequest):
                         "LastName": user_data.get("Lastname", ""), "type": "refresh"}
                     
                     # Set the token to expire in 60 minutes
-                    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+                    access_token_expires = timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS) # 30 years into the future
 
                     # Generate the JWT token
                     access_token = create_access_token(data=token_data, expires_delta=access_token_expires)
