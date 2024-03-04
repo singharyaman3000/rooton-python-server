@@ -584,14 +584,9 @@ def cleandict(my_dict):
     return my_dict
 
 
-def core_model(fos, level, college_df, weights={"FieldOfStudy": 0.4, "Title": 0.3, "Level": 0.3}):
+def core_model(fos, level, college_df):
     if level != "false" or fos != "false":
         college_df["IeltsOverall"] = college_df["IeltsOverall"].astype(float).round(1)
-
-        fos_weight = weights.get("FieldOfStudy", 0.4)
-        title_weight = weights.get("Title", 0.3)
-        level_weight = weights.get("Level", 0.3)
-
         college_df["Length"] = (
             college_df["Length"]
             .astype("str")
@@ -634,9 +629,9 @@ def core_model(fos, level, college_df, weights={"FieldOfStudy": 0.4, "Title": 0.
         pairwise_kernels = sk.pairwise_kernels(Input_transform, X).flatten()
 
         # # Modify this part to include weights
-        pairwise_kernels = pairwise_kernels * fos_weight * title_weight * level_weight
+        pairwise_kernels = pairwise_kernels
 
-        related_docs_indices = pairwise_kernels.argsort()[:-25:-1]
+        related_docs_indices = pairwise_kernels.argsort()[:-59:-1]
 
         df = pd.DataFrame(columns=college_df.columns)
         point = 0
@@ -733,8 +728,8 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         # # )
 
         # selected_fos = GPTfunction(messages, text=True, max_tokens_count=3000, usedmodel="gpt-3.5-turbo-instruct") + " " + selected_fos
-        # messages = "Give me relevant keywords around " + selected_fos +", also try to give me words which are spelled different in the world related to "+ selected_fos +" (this is just one of the example, Jewellery, Jewelery) also try to break and concate word and make a cluster of relevent keywords in canada"
-        # selected_fos = GPTfunction(messages, text=True, max_tokens_count=3000, usedmodel="gpt-3.5-turbo-instruct") + " " + selected_fos
+        messages = "Give me relevant keywords around " + selected_fos +", also try to give me words which are spelled different in the world related to "+ selected_fos +" (this is just one of the example, Jewellery, Jewelery) also try to break and concate word and make a cluster of relevent keywords in canada"
+        selected_fos = GPTfunction(messages, text=True, max_tokens_count=3000, usedmodel="gpt-3.5-turbo-instruct") + " " + selected_fos
         # print("selected_fos", selected_fos)
 
         title = selected_fos
