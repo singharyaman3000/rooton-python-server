@@ -393,7 +393,7 @@ def GPTfunction(messages, max_tokens_count=350, text=False, usedmodel="gpt-4"):
         return message
 
 
-def priority(dataframe, dictionary, selected_fos):
+def priority1(dataframe, dictionary, selected_fos):
     results = []
     df_copy = dataframe.copy()
     # print(dictionary)
@@ -478,7 +478,46 @@ def priority(dataframe, dictionary, selected_fos):
     return final_finalResult
 
 
-# def calibre_checker(df, Imarks):
+def priority(dataframe, dictionary, selected_fos):
+    try:
+        results = []
+        for i in range(len(dictionary), 0, -1):
+            df_copy = dataframe.copy()
+            print(f"Processing dictionary with {i} items.")  # Shows the iteration step
+
+            sub_dict = dict(list(dictionary.items())[0:i])
+            for key, value in sub_dict.items():
+                print(f"Filtering for {key} with value: {value}")  # Shows the current filtering condition
+
+                if isinstance(value, str) and ',' in value:
+                    values = [v.strip() for v in value.split(',')]
+                    print(f"Applying filter on {key} for any of {values}")  # Shows the filter condition
+                    df_copy = df_copy[df_copy[key].isin(values)]
+                elif isinstance(value, set):
+                    pattern = '|'.join([re.escape(item) for item in value])
+                    print(f"Applying regex filter on {key} for pattern: {pattern}")  # Shows the regex being used
+                    df_copy = df_copy[df_copy[key].str.contains(pattern, case=False)]
+                elif isinstance(value, (int, float)):
+                    print(f"Applying numerical filter on {key} for value <= {value}")  # Shows the numerical condition
+                    df_copy = df_copy[df_copy[key] <= value]
+                else:
+                    print(f"Applying exact string match filter on {key} for: {value}")  # Shows the string comparison
+                    df_copy = df_copy[df_copy[key].str.lower() == value.lower()]
+
+            if not df_copy.empty:
+                counts = df_copy["Title"].str.count("|".join([re.escape(fos) for fos in selected_fos]), flags=re.IGNORECASE)
+                df_copy = df_copy.assign(score=counts).sort_values('score', ascending=False).drop('score', axis=1)
+                results.append(df_copy)
+
+        final_result = pd.concat(results, ignore_index=True) if results else pd.DataFrame()
+        final_result = pd.concat([final_result, dataframe], ignore_index=True).drop_duplicates(subset="_id", keep="first")
+
+        # No need to filter columns here as we want to return the entire final_result for debugging
+        return final_result
+    except Exception as e:
+        print(f"Error processing request in priority: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing request in priority: {e}")
+# def calibre_checker(df, Imarks):  
 #     noteligible = pd.DataFrame(columns=df.columns)
 
 #     # Iterate through each row of the original DataFrame
@@ -747,8 +786,8 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         if len(dictionary) == 1:
             recommended_course_names = fill
         else:
-            # recommended_course_names = priority(fill, dictionary, selected_fos)
-            recommended_course_names = fill
+            recommended_course_names = priority1(fill, dictionary, selected_fos)
+            # recommended_course_names = fill
 
         recommended_course_names.drop(
             [
@@ -853,6 +892,7 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         eligible1 = eligible1.head(31)
 
         noteligible1.fillna("N/A", inplace=True)
+        # eligible1.to_csv("recommendations.csv", index=False, header=True)
         noteligible1 = noteligible1.head(31)
 
         recommendData = eligible1.to_dict("records")
