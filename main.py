@@ -396,6 +396,7 @@ def GPTfunction(messages, max_tokens_count=350, text=False, usedmodel="gpt-4"):
 def priorty(dataframe, dictionary, selected_fos):
     results = []
     df_copy = dataframe.copy()
+    print(dictionary)
     for i in range(len(dictionary), 0, -1):
         df_copy = dataframe.copy()
 
@@ -438,8 +439,9 @@ def priorty(dataframe, dictionary, selected_fos):
                         comp_str += "(df_copy['{0}'].str.lower()=='{1}')".format(
                             key, sub_dict[key]
                         )
-            # print(comp_str)
+            print(comp_str)
             df = df_copy[eval(comp_str)]
+            # print(df)
 
             counts = df["Title"].str.count("|".join(selected_fos), flags=re.IGNORECASE)
 
@@ -537,9 +539,13 @@ def cleandict(my_dict):
     return my_dict
 
 
-def core_model(fos, level, college_df):
+def core_model(fos, level, college_df, weights={"FieldOfStudy": 0.4, "Title": 0.3, "Level": 0.3}):
     if level != "false" or fos != "false":
         college_df["IeltsOverall"] = college_df["IeltsOverall"].astype(float).round(1)
+
+        fos_weight = weights.get("FieldOfStudy", 0.4)
+        title_weight = weights.get("Title", 0.3)
+        level_weight = weights.get("Level", 0.3)
 
         college_df["Length"] = (
             college_df["Length"]
@@ -571,7 +577,7 @@ def core_model(fos, level, college_df):
             + " "
             + college_df["Level"].astype(str)
         )
-
+        comb_frame = comb_frame.replace({"[^A-Za-z0-9 ]+": ""}, regex=True)
         vectorizer = TfidfVectorizer(stop_words="english")
         X = vectorizer.fit_transform(comb_frame)
         if level == None:
@@ -580,9 +586,12 @@ def core_model(fos, level, college_df):
             Query_Input = fos + " " + level
         Input_transform = vectorizer.transform([Query_Input])
 
-        cosine_similarities = sk.pairwise_kernels(Input_transform, X).flatten()
+        pairwise_kernels = sk.pairwise_kernels(Input_transform, X).flatten()
 
-        related_docs_indices = cosine_similarities.argsort()[:-300:-1]
+        # # Modify this part to include weights
+        pairwise_kernels = pairwise_kernels * fos_weight * title_weight * level_weight
+
+        related_docs_indices = pairwise_kernels.argsort()[:-300:-1]
 
         df = pd.DataFrame(columns=college_df.columns)
         point = 0
@@ -601,7 +610,7 @@ def core_model(fos, level, college_df):
 @app.post("/api/recommend_courses", response_model=CourseResponse)
 async def recommend_courses(request: CourseRequest, email: str = Depends(get_current_user)):
     try:
-        # print("recieved Request", request)
+        print("recieved Request", request)
         start = time.time()
         my_dict = request.dictionary
         received_dictionary = {}
@@ -656,13 +665,15 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         #     "content": "I'm interested in"+ selected_fos
         #     },]
 
-        messages = (
-            "Generate a list of 18 courses related to "
-            + selected_fos
-            + " that are available at Canadian universities or colleges, including a mix of undergraduate, postgraduate, and certification programs if applicable."
-        )
 
-        selected_fos = GPTfunction(messages, text=True, usedmodel="gpt-3.5-turbo-instruct") + " " + selected_fos
+        messages = "List 18 courses related to " + selected_fos + " that can be studied in canada"
+        # messages = (
+        #     "Generate a list of 18 courses related to "
+        #     + selected_fos
+        #     + " that are available at Canadian universities or colleges, including a mix of undergraduate, postgraduate, and certification programs if applicable."
+        # )
+
+        selected_fos = GPTfunction(messages, text=True, max_tokens_count=3000, usedmodel="gpt-3.5-turbo-instruct") + " " + selected_fos
 
         title = selected_fos
         x = title.replace(",", " ")
