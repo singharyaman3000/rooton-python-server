@@ -393,10 +393,10 @@ def GPTfunction(messages, max_tokens_count=350, text=False, usedmodel="gpt-4"):
         return message
 
 
-def priorty(dataframe, dictionary, selected_fos):
+def priority(dataframe, dictionary, selected_fos):
     results = []
     df_copy = dataframe.copy()
-    print(dictionary)
+    # print(dictionary)
     for i in range(len(dictionary), 0, -1):
         df_copy = dataframe.copy()
 
@@ -439,7 +439,7 @@ def priorty(dataframe, dictionary, selected_fos):
                         comp_str += "(df_copy['{0}'].str.lower()=='{1}')".format(
                             key, sub_dict[key]
                         )
-            print(comp_str)
+            # print(comp_str)
             df = df_copy[eval(comp_str)]
             # print(df)
 
@@ -644,10 +644,18 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         received_dictionary.pop("Duration")
         received_dictionary.pop("Intake")
         value = fetch_all_data("test", "courses")
-        college_df = pd.DataFrame(value)
-        userdetails = perform_database_operation(
-            "test", "userdetails", "read", {"email": email}
-        )
+        creation_df = pd.DataFrame(value)
+
+        # college_df = creation_df[creation_df['Level'] == received_dictionary["Level"]]
+        # college_df = creation_df[(creation_df['Level'] == received_dictionary["Level"]) & (creation_df['Province'] != 'Ontario')]
+        levels = received_dictionary["Level"].split(', ')
+        provinces = received_dictionary["Province"].split(', ')
+        college_df = creation_df[(creation_df['Level'].isin(levels)) & (creation_df['Province'].isin(provinces))]
+
+
+        # userdetails = perform_database_operation(
+        #     "test", "userdetails", "read", {"email": email}
+        # )
         selected_fos = received_dictionary["Title"]
         selected_level = received_dictionary["Level"].lower()
 
@@ -666,14 +674,17 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         #     },]
 
 
-        messages = "List 18 courses related to " + selected_fos + " that can be studied in canada"
-        # messages = (
-        #     "Generate a list of 18 courses related to "
-        #     + selected_fos
-        #     + " that are available at Canadian universities or colleges, including a mix of undergraduate, postgraduate, and certification programs if applicable."
-        # )
+        # messages = "List 18 courses related to " + selected_fos + " that can be studied in canada"
+        # # messages = (
+        # #     "Generate a list of 18 courses related to "
+        # #     + selected_fos
+        # #     + " that are available at Canadian universities or colleges, including a mix of undergraduate, postgraduate, and certification programs if applicable."
+        # # )
 
-        selected_fos = GPTfunction(messages, text=True, max_tokens_count=3000, usedmodel="gpt-3.5-turbo-instruct") + " " + selected_fos
+        # selected_fos = GPTfunction(messages, text=True, max_tokens_count=3000, usedmodel="gpt-3.5-turbo-instruct") + " " + selected_fos
+        # messages = "Give me relevant keywords around " + selected_fos +", also try to give me words which are spelled different in the world related to "+ selected_fos +" (this is just one of the example, Jewellery, Jewelery) also try to break and concate word and make a cluster of relevent keywords in canada"
+        # selected_fos = GPTfunction(messages, text=True, max_tokens_count=3000, usedmodel="gpt-3.5-turbo-instruct") + " " + selected_fos
+        # print("selected_fos", selected_fos)
 
         title = selected_fos
         x = title.replace(",", " ")
@@ -689,6 +700,7 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
 
         selected_fos = input_words
         received_dictionary["Title"] = selected_fos
+        print("selected_fos", selected_fos)
 
         received_dictionary["Level"] = received_dictionary["Level"].lower()
         received_dictionary["Province"] = received_dictionary["Province"].lower()
@@ -735,7 +747,8 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         if len(dictionary) == 1:
             recommended_course_names = fill
         else:
-            recommended_course_names = priorty(fill, dictionary, selected_fos)
+            # recommended_course_names = priority(fill, dictionary, selected_fos)
+            recommended_course_names = fill
 
         recommended_course_names.drop(
             [
@@ -804,6 +817,7 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
                 "GMAT",
                 "City",
                 "Province",
+                "InstituteCategory"
             ]
         )
         noteligible1 = noteligible1.reindex(
@@ -839,6 +853,7 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         eligible1 = eligible1.head(31)
 
         noteligible1.fillna("N/A", inplace=True)
+        noteligible1 = noteligible1.head(31)
 
         recommendData = eligible1.to_dict("records")
         end = time.time()
@@ -1242,6 +1257,23 @@ def sop_sowp_builder(request: SOPSOWPRequest, email: str = Depends(get_current_u
 @app.get("/")
 def root():
     return {"message": "Hello World"}
+
+@app.get("/api/dropdowns")
+def get_dropdowns(email: str = Depends(get_current_user)):
+    try:
+        # Perform database operations
+        value = fetch_all_data("test","courses")
+        college_df = pd.DataFrame(value)
+        unique_level = sorted(set(college_df["Level"].values))
+        unique_fos = sorted(set(college_df["FieldOfStudy"].values))
+        unique_province = sorted(set(college_df["Province"].values))
+        unique_level.insert(0, "")
+        unique_fos.insert(0, "")
+        unique_province.insert(0, "")
+        return {"Status": "Success", "Level": unique_level, "FieldOfStudy": unique_fos, "Province": unique_province}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing request : {e}")
+
 
 if __name__ == "__main__":
     import uvicorn
