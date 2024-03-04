@@ -33,6 +33,9 @@ from starlette.requests import Request
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import JSONResponse, RedirectResponse
 from authlib.integrations.starlette_client import OAuth, OAuthError
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
+from base64 import b64decode
 
 
 load_dotenv()
@@ -62,7 +65,7 @@ class CourseRequest(BaseModel):
     dictionary: dict
     email: str
     LanguageProficiency:str
-    Score:float
+    Score:float | str
 
 class VisaPRRequest(BaseModel):
     email: str
@@ -77,6 +80,9 @@ class SOPSOWPRequest(BaseModel):
     prompt: List[PromptItem]
     maxtoken: int 
     model: str
+
+class EncryptedRequest(BaseModel):
+    encryptedData: str
 
 class CourseResponse(BaseModel):
     data: dict
@@ -572,7 +578,7 @@ def calibre_checker(df: pd.DataFrame, language_proficiency, my_marks):
 def cleandict(my_dict):
     for key in list(my_dict.keys()):
         # Check if the value of the key is an empty string, zero or None
-        if my_dict[key] in ["", 0, None]:
+        if my_dict[key] in ["", 0, None,"Any Province"]:
             # If the value meets the specified criteria, remove the key
             del my_dict[key]
     return my_dict
@@ -630,7 +636,7 @@ def core_model(fos, level, college_df, weights={"FieldOfStudy": 0.4, "Title": 0.
         # # Modify this part to include weights
         pairwise_kernels = pairwise_kernels * fos_weight * title_weight * level_weight
 
-        related_docs_indices = pairwise_kernels.argsort()[:-300:-1]
+        related_docs_indices = pairwise_kernels.argsort()[:-25:-1]
 
         df = pd.DataFrame(columns=college_df.columns)
         point = 0
@@ -688,8 +694,14 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         # college_df = creation_df[creation_df['Level'] == received_dictionary["Level"]]
         # college_df = creation_df[(creation_df['Level'] == received_dictionary["Level"]) & (creation_df['Province'] != 'Ontario')]
         levels = received_dictionary["Level"].split(', ')
-        provinces = received_dictionary["Province"].split(', ')
-        college_df = creation_df[(creation_df['Level'].isin(levels)) & (creation_df['Province'].isin(provinces))]
+        if received_dictionary["Province"] == "Any Province" or received_dictionary["Province"] == "":
+            provinces = ["Alberta","British Columbia","Manitoba","New Brunswick","Newfoundland and Labrador",
+                         "Northwest Territories","Nova Scotia","Ontario","Prince Edward Island",
+                         "Quebec","Saskatchewan","Yukon Territory"]
+            college_df = creation_df[(creation_df['Level'].isin(levels))]
+        else:
+            provinces = received_dictionary["Province"].split(', ')
+            college_df = creation_df[(creation_df['Level'].isin(levels)) & (creation_df['Province'].isin(provinces))]
 
 
         # userdetails = perform_database_operation(
@@ -815,100 +827,154 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         #         IELTS_O = 6.5 #Conditioning is remaining...
         # else:
         #     IELTS_O = 6.5
-        eligible1, noteligible1 = calibre_checker(recommended_course_names, request.LanguageProficiency,request.Score)
-        
-        # print("Duplicates in eligible: 1", eligible1.duplicated().sum())
-        # print("Duplicates in noteligible: 3", noteligible1.duplicated().sum())
+        if (request.LanguageProficiency!=""):
+            eligible1, noteligible1 = calibre_checker(recommended_course_names, request.LanguageProficiency,request.Score)
+
+            # print("Duplicates in eligible: 1", eligible1.duplicated().sum())
+            # print("Duplicates in noteligible: 3", noteligible1.duplicated().sum())
 
 
-        eligible1["Length"] = eligible1["Length"].apply(
-            lambda x: f"{x // 12} Year{'s' if x // 12 > 1 else ''} " + f"{x % 12} Months"
-            if x >= 12
-            else f"{x} Months"
-        )
-        noteligible1["Length"] = noteligible1["Length"].apply(
-            lambda x: f"{x // 12} Year{'s' if x // 12 > 1 else ''} " + f"{x % 12} Months"
-            if x >= 12
-            else f"{x} Months"
-        )
-        eligible1 = eligible1.reindex(
-            columns=[
-                "CreatedOn",
-                "FieldOfStudy",
-                "InstituteName",
-                "Title",
-                "Level",
-                "Length",
-                "ApplicationFee",
-                "FeeText",
-                "Seasons",
-                "Status",
-                "Deadline",
-                "Percentage",
-                "Backlog",
-                "Gap",
-                "Campus",
-                "IeltsOverall",
-                "PteOverall",
-                "TOEFLOverall",
-                "DuolingoOverall",
-                "GRE",
-                "GMAT",
-                "City",
-                "Province",
-                "InstituteCategory"
-            ]
-        )
-        noteligible1 = noteligible1.reindex(
-            columns=[
-                "CreatedOn",
-                "FieldOfStudy",
-                "InstituteName",
-                "Title",
-                "Level",
-                "Length",
-                "ApplicationFee",
-                "FeeText",
-                "Seasons",
-                "Status",
-                "Deadline",
-                "Percentage",
-                "Backlog",
-                "Gap",
-                "Campus",
-                "IeltsOverall",
-                "PteOverall",
-                "TOEFLOverall",
-                "DuolingoOverall",
-                "GRE",
-                "GMAT",
-                "City",
-                "Province",
-                "Notes",
-            ]
-        )
+            eligible1["Length"] = eligible1["Length"].apply(
+                lambda x: f"{x // 12} Year{'s' if x // 12 > 1 else ''} " + f"{x % 12} Months"
+                if x >= 12
+                else f"{x} Months"
+            )
+            noteligible1["Length"] = noteligible1["Length"].apply(
+                lambda x: f"{x // 12} Year{'s' if x // 12 > 1 else ''} " + f"{x % 12} Months"
+                if x >= 12
+                else f"{x} Months"
+            )
+            eligible1 = eligible1.reindex(
+                columns=[
+                    "CreatedOn",
+                    "FieldOfStudy",
+                    "InstituteName",
+                    "Title",
+                    "Level",
+                    "Length",
+                    "ApplicationFee",
+                    "FeeText",
+                    "Seasons",
+                    "Status",
+                    "Deadline",
+                    "Percentage",
+                    "Backlog",
+                    "Gap",
+                    "Campus",
+                    "IeltsOverall",
+                    "PteOverall",
+                    "TOEFLOverall",
+                    "DuolingoOverall",
+                    "GRE",
+                    "GMAT",
+                    "City",
+                    "Province",
+                    "InstituteCategory"
+                ]
+            )
+            noteligible1 = noteligible1.reindex(
+                columns=[
+                    "CreatedOn",
+                    "FieldOfStudy",
+                    "InstituteName",
+                    "Title",
+                    "Level",
+                    "Length",
+                    "ApplicationFee",
+                    "FeeText",
+                    "Seasons",
+                    "Status",
+                    "Deadline",
+                    "Percentage",
+                    "Backlog",
+                    "Gap",
+                    "Campus",
+                    "IeltsOverall",
+                    "PteOverall",
+                    "TOEFLOverall",
+                    "DuolingoOverall",
+                    "GRE",
+                    "GMAT",
+                    "City",
+                    "Province",
+                    "Notes",
+                ]
+            )
 
-        eligible1.fillna("N/A", inplace=True)
-        eligible1 = eligible1.head(31)
+            eligible1.fillna("N/A", inplace=True)
+            eligible1 = eligible1.head(31)
 
-        noteligible1.fillna("N/A", inplace=True)
-        # eligible1.to_csv("recommendations.csv", index=False, header=True)
-        noteligible1 = noteligible1.head(31)
+            noteligible1.fillna("N/A", inplace=True)
+            # eligible1.to_csv("recommendations.csv", index=False, header=True)
+            noteligible1 = noteligible1.head(31)
 
-        recommendData = eligible1.to_dict("records")
-        end = time.time()
-        response_time = end - start
-        print(response_time)
-        # print(json_data)
+            recommendData = eligible1.to_dict("records")
+            end = time.time()
+            response_time = end - start
+            print(response_time)
+            # print(json_data)
 
-        return CourseResponse(
-            data={
-                "message": "Course recommendations generated successfully",
-                "eligible": recommendData,
-                "noteligible": noteligible1.to_dict("records"),
-                "response_time": response_time,
-            }
-        )
+            return CourseResponse(
+                data={
+                    "message": "Course recommendations generated successfully",
+                    "eligible": recommendData,
+                    "noteligible": noteligible1.to_dict("records"),
+                    "response_time": response_time,
+                }
+            )
+        else:
+            eligible1 = recommended_course_names
+            eligible1["Length"] = eligible1["Length"].apply(
+                lambda x: f"{x // 12} Year{'s' if x // 12 > 1 else ''} " + f"{x % 12} Months"
+                if x >= 12
+                else f"{x} Months"
+            )
+            eligible1 = eligible1.reindex(
+                columns=[
+                    "CreatedOn",
+                    "FieldOfStudy",
+                    "InstituteName",
+                    "Title",
+                    "Level",
+                    "Length",
+                    "ApplicationFee",
+                    "FeeText",
+                    "Seasons",
+                    "Status",
+                    "Deadline",
+                    "Percentage",
+                    "Backlog",
+                    "Gap",
+                    "Campus",
+                    "IeltsOverall",
+                    "PteOverall",
+                    "TOEFLOverall",
+                    "DuolingoOverall",
+                    "GRE",
+                    "GMAT",
+                    "City",
+                    "Province",
+                    "InstituteCategory"
+                ]
+            )
+
+            eligible1.fillna("N/A", inplace=True)
+            eligible1 = eligible1.head(31)
+
+            recommendData = eligible1.to_dict("records")
+            end = time.time()
+            response_time = end - start
+            print(response_time)
+            # print(json_data)
+
+            return CourseResponse(
+                data={
+                    "message": "Course recommendations generated successfully",
+                    "eligible": recommendData,
+                    "noteligible": [],
+                    "response_time": response_time,
+                }
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing request : {e}")
 
@@ -1285,11 +1351,25 @@ def visa_pr_prob(request: VisaPRRequest, email: str = Depends(get_current_user))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing request : {e}")
 
+def decrypt_with_aes(ciphertext, secret_key):
+    key = b64decode(secret_key)
+    iv, ct = b64decode(ciphertext[:24]), b64decode(ciphertext[24:])
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    pt = unpad(cipher.decrypt(ct), AES.block_size).decode('utf-8')
+    return pt
+
 @app.post("/api/sop-sowp-builder")
-def sop_sowp_builder(request: SOPSOWPRequest, email: str = Depends(get_current_user)):
+def sop_sowp_builder(request: EncryptedRequest, email: str = Depends(get_current_user)):
     try:
-        messages = [{"role": item.role, "content": item.content} for item in request.prompt]
-        result = GPTfunction(messages, usedmodel=request.model, max_tokens_count=request.maxtoken)
+        # secret_key = os.getenv("NEXT_ENCRYPTION_KEY")
+        secret_key = 'pvuM6lsaQHCIEZHD3bO5GFAak0NlWcWc4EvkQ9y+ysg='
+        # print(secret_key==secret_key1)
+        decrypted = decrypt_with_aes(request.encryptedData, secret_key)
+        # print(f'Decrypted: {decrypted}')
+        # print(type(decrypted))
+        decrypted_data = json.loads(decrypted)
+        messages = [{"role": item["role"], "content": item["content"]} for item in decrypted_data["prompt"]]
+        result = GPTfunction(messages, usedmodel=decrypted_data["model"], max_tokens_count=decrypted_data["maxtoken"])
         return {"Status": "Success", "Letter": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing request : {e}")
@@ -1309,7 +1389,7 @@ def get_dropdowns(email: str = Depends(get_current_user)):
         unique_province = sorted(set(college_df["Province"].values))
         unique_level.insert(0, "")
         unique_fos.insert(0, "")
-        unique_province.insert(0, "")
+        unique_province.insert(0, "Any Province")
         return {"Status": "Success", "Level": unique_level, "FieldOfStudy": unique_fos, "Province": unique_province}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing request : {e}")
