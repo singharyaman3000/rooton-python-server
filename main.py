@@ -1382,12 +1382,32 @@ def get_dropdowns(email: str = Depends(get_current_user)):
         unique_level = sorted(set(college_df["Level"].values))
         unique_fos = sorted(set(college_df["FieldOfStudy"].values))
         unique_province = sorted(set(college_df["Province"].values))
-        unique_level.insert(0, "")
-        unique_fos.insert(0, "")
+        # unique_level.insert(0, "")
+        # unique_fos.insert(0, "")
         unique_province.insert(0, "Any Province")
         return {"Status": "Success", "Level": unique_level, "FieldOfStudy": unique_fos, "Province": unique_province}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing request : {e}")
+
+
+@app.get('/api/userRole')
+def getUserRole(email: str = Depends(get_current_user)):
+    try:
+        users = perform_database_operation(
+            "test", "userdetails", "read", {"email": email}
+        )
+        if users and len(users) > 0:
+            # Serialize the data using the custom JSON encoder and return it as a JSON response
+            return ({"Role":users[0]['Role']})
+        else:
+            raise HTTPException(status_code=404, detail="Invalid Token")
+    except HTTPException as http_exc:
+        # If it's an HTTPException, we just re-raise it
+        # This is assuming HTTPException is meant to be used for HTTP status-related errors
+        raise http_exc
+    except Exception as e:
+        # For any other kind of exception, it's an internal server error
+        raise HTTPException(status_code=500, detail=f"Role Info Fetch Failed: {e}")
 
 
 if __name__ == "__main__":
