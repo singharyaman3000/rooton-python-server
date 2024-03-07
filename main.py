@@ -69,7 +69,7 @@ class CourseRequest(BaseModel):
 
 class VisaPRRequest(BaseModel):
     email: str
-    dictionary: dict
+    course: dict
     ask: str
 
 class PromptItem(BaseModel):
@@ -756,7 +756,7 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
 
         selected_fos = " ".join(selected_fos)
 
-        fill = core_model(selected_fos, selected_level, college_df)
+        fill = core_model(selected_fos, selected_level, college_df) #Warning in the console comes from this function
 
         fill["_id"] = fill["_id"].astype(str)
         for i in range(len(fill["Intake"])):
@@ -769,22 +769,51 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         seasons = []
         statuses = []
         deadlines = []
-
-        for d in fill["Intake"]:
-            intake = d
-
+        # print("Processing started above here")
+        for d_idx, d in enumerate(fill["Intake"]):
+            if d is None:
+                print(f"Skipping None intake at index {d_idx}")
+                continue
+            
             d_seasons = []
             d_statuses = []
             d_deadlines = []
 
-            for i in intake:
-                d_seasons.append(i["season"])
-                d_statuses.append(i["status"])
-                d_deadlines.append(i["deadline"])
-
+            for i in d:
+                if not isinstance(i, dict) or 'season' not in i or 'status' not in i or 'deadline' not in i:
+                    print(f"Malformed intake entry detected: {i}")
+                    continue
+                
+                try:
+                    d_seasons.append(i["season"])
+                    d_statuses.append(i["status"])
+                    d_deadlines.append(i["deadline"])
+                except Exception as e:
+                    print(f"Error processing intake entry {i}: {e}")
+                    continue  # Skip this entry and proceed to the next
+                
             seasons.append(", ".join(d_seasons))
             statuses.append(", ".join(d_statuses))
             deadlines.append(", ".join(d_deadlines))
+        # print("Processing completed successfully")
+
+        # print("ye for loop mein locha hai worked till here")
+        # for d in fill["Intake"]:
+        #     intake = d
+
+        #     d_seasons = []
+        #     d_statuses = []
+        #     d_deadlines = []
+
+        #     for i in intake:
+        #         d_seasons.append(i["season"])
+        #         d_statuses.append(i["status"])
+        #         d_deadlines.append(i["deadline"])
+
+        #     seasons.append(", ".join(d_seasons))
+        #     statuses.append(", ".join(d_statuses))
+        #     deadlines.append(", ".join(d_deadlines))
+        # print("ye for loop mein locha hai worked till here")
 
         intake_df = pd.DataFrame(
             {"Seasons": seasons, "Status": statuses, "Deadline": deadlines}
@@ -824,9 +853,6 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         #     IELTS_O = 6.5
         if (request.LanguageProficiency!=""):
             eligible1, noteligible1 = calibre_checker(recommended_course_names, request.LanguageProficiency,request.Score)
-
-            # print("Duplicates in eligible: 1", eligible1.duplicated().sum())
-            # print("Duplicates in noteligible: 3", noteligible1.duplicated().sum())
 
 
             eligible1["Length"] = eligible1["Length"].apply(
@@ -907,7 +933,6 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
             end = time.time()
             response_time = end - start
             print(response_time)
-            # print(json_data)
 
             return CourseResponse(
                 data={
@@ -960,7 +985,6 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
             end = time.time()
             response_time = end - start
             print(response_time)
-            # print(json_data)
 
             return CourseResponse(
                 data={
@@ -1307,7 +1331,7 @@ def visa_pr_prob(request: VisaPRRequest, email: str = Depends(get_current_user))
             user_data = users[0]  # Get the first record
             # Check if the user is verified
             stringUser = str(user_data)
-            stringCourse = str(request.dictionary)
+            stringCourse = str(request.course)
             if user_data:
                 if request.ask == "Visa":
                     messages = [{
@@ -1319,8 +1343,8 @@ def visa_pr_prob(request: VisaPRRequest, email: str = Depends(get_current_user))
                     "content": "Given the course details: "+stringCourse+" and my profile: "+stringUser+" , what are my chances of getting a Canadian Visa?"
                             }]
                     result = GPTfunction(messages, text=False)
-                    request.dictionary["Visa Chances"] = result
-                    return {"Status": "Success", "Message": request.dictionary}
+                    request.course["Visa Chances"] = result
+                    return {"Status": "Success", "Message": request.course}
                     
                 elif request.ask == "PR":
                     messages = [{
@@ -1332,8 +1356,8 @@ def visa_pr_prob(request: VisaPRRequest, email: str = Depends(get_current_user))
                     "content": "Given the course details: "+stringCourse+" and my profile: "+stringUser+" , what are my chances of getting a Canadian PR?"
                             }]
                     result = GPTfunction(messages, text=False)
-                    request.dictionary["PR Chances"] = result
-                    return {"Status": "Success", "Message": request.dictionary}
+                    request.course["PR Chances"] = result
+                    return {"Status": "Success", "Message": request.course}
                 else:
                     raise HTTPException(status_code=400, detail="Invalid request")
             else:
