@@ -1321,11 +1321,36 @@ def profile_info(request: ProfileInfoRequest, email: str = Depends(get_current_u
         raise HTTPException(status_code=500, detail=f"Profile Info Failed: {e}")
 
 def update_course_details(course_str):
-    # Split the input string at the first occurrence of '\n'
-    parts = course_str.split('\n', 1)
-    chances = parts[0]  # The part before '\n'
-    description = parts[1].replace('\n', '') if len(parts) > 1 else ''  # The part after '\n' or empty if '\n' is not present
-    return chances, description
+    # Initialize keywords
+    keywords = ['High', 'Medium', 'Low']
+    
+    # Initialize the default values for chance and description
+    chance = "Keyword not found"
+    description = ''
+    
+    # Iterate over the string to find the first occurrence of any keyword
+    for keyword in keywords:
+        keyword_pos = course_str.find(keyword)
+        if keyword_pos != -1:
+            # Extract the keyword as chance
+            chance = keyword
+            
+            # Cut the string from right after the keyword
+            start_pos = keyword_pos + len(keyword)
+            
+            # Check for specific symbols immediately after the keyword and skip them
+            if course_str[start_pos:start_pos+2] in {'. ', ', '}:
+                start_pos += 2
+            elif course_str[start_pos] in {'\n', '.', ','}:
+                start_pos += 1
+            
+            # The rest of the string becomes the description
+            description = course_str[start_pos:].strip()
+            break
+    
+    return chance, description
+
+
 
 @app.post("/api/visa-pr-prob")
 def visa_pr_prob(request: VisaPRRequest, email: str = Depends(get_current_user)):
