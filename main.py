@@ -1320,6 +1320,12 @@ def profile_info(request: ProfileInfoRequest, email: str = Depends(get_current_u
         # For any other kind of exception, it's an internal server error
         raise HTTPException(status_code=500, detail=f"Profile Info Failed: {e}")
 
+def update_course_details(course_str):
+    # Split the input string at the first occurrence of '\n'
+    parts = course_str.split('\n', 1)
+    chances = parts[0]  # The part before '\n'
+    description = parts[1].replace('\n', '') if len(parts) > 1 else ''  # The part after '\n' or empty if '\n' is not present
+    return chances, description
 
 @app.post("/api/visa-pr-prob")
 def visa_pr_prob(request: VisaPRRequest, email: str = Depends(get_current_user)):
@@ -1343,20 +1349,23 @@ def visa_pr_prob(request: VisaPRRequest, email: str = Depends(get_current_user))
                     "content": "Given the course details: "+stringCourse+" and my profile: "+stringUser+" , what are my chances of getting a Canadian Visa?"
                             }]
                     result = GPTfunction(messages, text=False)
-                    request.course["Visa Chances"] = result
+                    request.course["Visa Chances"], request.course["Description"] = update_course_details(result)
+                    # request.course["Visa Chances"] = result
+
                     return {"Status": "Success", "Message": request.course}
                     
                 elif request.ask == "PR":
                     messages = [{
                     "role": "system",
-                    "content": "Based on the provided user profile and course details, assess the chances of obtaining a Canadian PR for the user. Consider factors such as the user's academic background, test scores, work experience, and chosen program of study. The course and user profile data are dynamic and should be evaluated in the context of current immigration policies and program requirements. ALWAYS REMEMBER you have to answer only in single word High, Medium, or Low, Not even a single word extra."
+                    "content": "Based on the provided user profile and course details, assess the chances of obtaining a Canadian PR for the user. Consider factors such as the user's academic background, test scores, work experience, and chosen program of study. The course and user profile data are dynamic and should be evaluated in the context of current immigration policies and program requirements. ALWAYS REMEMBER you have to answer only in single word High, Medium, or Low, Also provide reason in two lines only"
                     },
                     {
                     "role": "user",
                     "content": "Given the course details: "+stringCourse+" and my profile: "+stringUser+" , what are my chances of getting a Canadian PR?"
                             }]
                     result = GPTfunction(messages, text=False)
-                    request.course["PR Chances"] = result
+                    request.course["PR Chances"], request.course["Description"] = update_course_details(result)
+                    # request.course["PR Chances"] = result
                     return {"Status": "Success", "Message": request.course}
                 else:
                     raise HTTPException(status_code=400, detail="Invalid request")
