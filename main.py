@@ -36,7 +36,7 @@ from authlib.integrations.starlette_client import OAuth, OAuthError
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from base64 import b64decode
-
+from starlette.datastructures import URL
 
 load_dotenv()
 
@@ -250,21 +250,29 @@ oauth.register(
 
 @app.get("/api/login/google")
 async def login_google(request: Request):
-    # referer = request.headers.get("referer")
-    # # Check if referer is None
-    # if referer is None:
-    #     # Handle the case where referer is missing
-    #     # You can raise an HTTPException or handle it in another appropriate way
-    #     raise HTTPException(status_code=403, detail="Access denied")
+    referer = request.headers.get("referer")
+    # Check if referer is None
+    if referer is None:
+        # Handle the case where referer is missing
+        # You can raise an HTTPException or handle it in another appropriate way
+        raise HTTPException(status_code=403, detail="Access denied")
     
-    # # Normalizing the referer by stripping the trailing slash if it exists
-    # normalized_referer = referer.rstrip('/')
-    # # Check if the referer is from the allowed origins
-    # if normalized_referer not in allowed_origins:
-    #     raise HTTPException(status_code=403, detail="Access denied")
+    # Normalizing the referer by stripping the trailing slash if it exists
+    normalized_referer = referer.rstrip('/')
+    # Check if the referer is from the allowed origins
+    if normalized_referer not in allowed_origins:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Obtain the redirect URI as a URL object
+    redirect_uri: URL = request.url_for('authorize_google')
+    
+    # Enforce HTTPS if we are not in a development environment (e.g., localhost)
+    if 'localhost' not in redirect_uri.netloc and os.getenv('ENVIRONMENT') == 'production':
+        redirect_uri = redirect_uri.replace(scheme='https')
+
+    # Pass the redirect_uri to authorize_redirect without converting it to string
     # The state is saved in the session in this call by default
-    redirect_uri = request.url_for('authorize_google')
-    print("redirect_uri--> ",redirect_uri, " \nredirect_uri type --->", type(redirect_uri))
+    # print(redirect_uri)
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
 
