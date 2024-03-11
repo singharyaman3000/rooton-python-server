@@ -264,7 +264,7 @@ async def login_google(request: Request):
     #     raise HTTPException(status_code=403, detail="Access denied")
     # The state is saved in the session in this call by default
     redirect_uri = request.url_for('authorize_google')
-    # print(redirect_uri)
+    print("redirect_uri--> ",redirect_uri, " \nredirect_uri type --->", type(redirect_uri))
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
 
