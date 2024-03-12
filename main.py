@@ -1219,7 +1219,7 @@ def profile_info(request: ProfileInfoRequest, email: str = Depends(get_current_u
         raise HTTPException(status_code=500, detail=f"Profile Info Failed: {e}")
 
 @app.post("/api/fogot-password")
-def resetPassword(request: ForgetRequest):
+def forgot_password(request: ForgetRequest):
     try:
         if is_email_present(request.email):
             auth_id = secrets.token_hex(40)
@@ -1238,7 +1238,7 @@ def resetPassword(request: ForgetRequest):
         raise HTTPException(status_code=500, detail="Error sending email {e}", err=str(e))
 
 @app.post("/api/reset-password")
-def verification(request: ResetPasswordRequest):
+def reset_password(request: ResetPasswordRequest):
     try:
         result = perform_database_operation(
             "test", "users", "read", {"authId": request.authId}
