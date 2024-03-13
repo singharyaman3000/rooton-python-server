@@ -1244,12 +1244,15 @@ def reset_password(request: ResetPasswordRequest):
             "test", "users", "read", {"authId": request.authId}
         )
         if result:
+            hashed_password = bcrypt.hashpw(
+                request.newpassword.encode("utf-8"), bcrypt.gensalt(10)
+            )
             perform_database_operation(
                 "test",
                 "users",
                 "update",
                 {"authId": request.authId},
-                {"unset": {"authId": ""}, "Password": request.newpassword},
+                {"unset": {"authId": ""}, "Password": hashed_password.decode("utf-8")},
             )
             return {"Status": "Success", "Message": "Password Updated Successfully"}
         else:
