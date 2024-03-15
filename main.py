@@ -61,6 +61,7 @@ class CourseRequest(BaseModel):
     email: str
     LanguageProficiency:str
     Score:float | str
+    toggle: bool
 
 class VisaPRRequest(BaseModel):
     email: str
@@ -134,7 +135,6 @@ def fetch_all_data(database, collection):
     try:
         for document in cursor:
             counter += 1
-            # print(counter)
             results.append(document)
     finally:
         cursor.close()
@@ -271,7 +271,6 @@ async def login_google(request: Request):
 
     # Pass the redirect_uri to authorize_redirect without converting it to string
     # The state is saved in the session in this call by default
-    # print(redirect_uri)
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
 
@@ -392,7 +391,6 @@ def GPTfunction(messages, max_tokens_count=350, text=False, usedmodel="gpt-4"):
             max_tokens=max_tokens_count,
         )
         message = response["choices"][0]["text"]
-        # print(message)
         return message
     else:
         response = openai.ChatCompletion.create(
@@ -402,14 +400,12 @@ def GPTfunction(messages, max_tokens_count=350, text=False, usedmodel="gpt-4"):
             max_tokens=max_tokens_count,
         )
         message = response["choices"][0]["message"]["content"]
-        # print(message)
         return message
 
 
 def priority1(dataframe, dictionary, selected_fos):
     results = []
     df_copy = dataframe.copy()
-    # print(dictionary)
     for i in range(len(dictionary), 0, -1):
         df_copy = dataframe.copy()
 
@@ -452,9 +448,7 @@ def priority1(dataframe, dictionary, selected_fos):
                         comp_str += "(df_copy['{0}'].str.lower()=='{1}')".format(
                             key, sub_dict[key]
                         )
-            # print(comp_str)
             df = df_copy[eval(comp_str)]
-            # print(df)
 
             counts = df["Title"].str.count("|".join(selected_fos), flags=re.IGNORECASE)
 
@@ -530,22 +524,10 @@ def priority(dataframe, dictionary, selected_fos):
     except Exception as e:
         print(f"Error processing request in priority: {e}")
         raise HTTPException(status_code=500, detail=f"Error processing request in priority: {e}")
-# def calibre_checker(df, Imarks):  
-#     noteligible = pd.DataFrame(columns=df.columns)
-
-#     # Iterate through each row of the original DataFrame
-#     for index, row in df.iterrows():
-#         # Check if the condition is satisfied
-#         if row["IeltsOverall"] > Imarks:
-#             # If not satisfied, drop the row and append it to the dropped DataFrame
-#             noteligible = pd.concat([noteligible, row.to_frame().T], ignore_index=True)
-#             df.drop(index, inplace=True)
-#     return df, noteligible
 
 def calibre_checker(df: pd.DataFrame, language_proficiency, my_marks):
     try:
         noteligible = pd.DataFrame(columns=df.columns)
-        # print("Duplicates in original df:", df.duplicated().sum())
         df = df.drop_duplicates()
         df = df.reset_index(drop=True)
 
@@ -559,7 +541,6 @@ def calibre_checker(df: pd.DataFrame, language_proficiency, my_marks):
             "GRE": "GRE",
             "TOEFL": "TOEFLOverall"
         }
-        # print("Intial --> ",len(df))
         # Determine the column to use for comparison based on the language proficiency provided
         score_column = proficiency_column_mapping.get(language_proficiency, "IeltsOverall")  # Default to IELTS if not found
         # Create a mask to filter eligible and not eligible entries
@@ -569,14 +550,6 @@ def calibre_checker(df: pd.DataFrame, language_proficiency, my_marks):
         # Filter based on the mask
         noteligible = df[not_eligible_mask]
         eligible = df[~not_eligible_mask]
-        # print(df[~df.index.isin(noteligible.index)])
-        
-        # print("Eligibile --> ",len(eligible))
-        # print("Not Eligible --> ",len(noteligible))
-
-        # print("Duplicates in eligible:", eligible.duplicated().sum())
-        # print("Duplicates in noteligible:", noteligible.duplicated().sum())
-
 
         return eligible, noteligible
     except Exception as e:
@@ -657,7 +630,7 @@ def core_model(fos, level, college_df):
 @app.post("/api/recommend_courses", response_model=CourseResponse)
 async def recommend_courses(request: CourseRequest, email: str = Depends(get_current_user)):
     try:
-        print("recieved Request", request)
+        # print("recieved Request", request)
         start = time.time()
         my_dict = request.dictionary
         received_dictionary = {}
@@ -735,9 +708,10 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         # # )
 
         # selected_fos = GPTfunction(messages, text=True, max_tokens_count=3000, usedmodel="gpt-3.5-turbo-instruct") + " " + selected_fos
-        messages = "Give me relevant keywords around " + selected_fos +", also try to give me words which are spelled different in the world related to "+ selected_fos +" (this is just one of the example, Jewellery, Jewelery) also try to break and concate word and make a cluster of relevent keywords in canada"
-        selected_fos = GPTfunction(messages, text=True, max_tokens_count=3000, usedmodel="gpt-3.5-turbo-instruct") + " " + selected_fos
-        # print("selected_fos", selected_fos)
+        if not request.toggle:
+            messages = "Give me relevant keywords around " + selected_fos +", also try to give me words which are spelled differently in the world related to "+ selected_fos +" (this is just one of the example --> Jewellery, Jewelery) also try to break and concate word and make a cluster of relevent keywords in canada"
+            selected_fos = GPTfunction(messages, text=True, max_tokens_count=3000, usedmodel="gpt-3.5-turbo-instruct") + " " + selected_fos
+
 
         title = selected_fos
         x = title.replace(",", " ")
@@ -753,7 +727,6 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
 
         selected_fos = input_words
         received_dictionary["Title"] = selected_fos
-        print("selected_fos", selected_fos)
 
         received_dictionary["Level"] = received_dictionary["Level"].lower()
         received_dictionary["Province"] = received_dictionary["Province"].lower()
@@ -939,7 +912,6 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
             recommendData = eligible1.to_dict("records")
             end = time.time()
             response_time = end - start
-            print(response_time)
 
             return CourseResponse(
                 data={
@@ -991,7 +963,6 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
             recommendData = eligible1.to_dict("records")
             end = time.time()
             response_time = end - start
-            print(response_time)
 
             return CourseResponse(
                 data={
