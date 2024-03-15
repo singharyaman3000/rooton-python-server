@@ -254,13 +254,13 @@ async def login_google(request: Request):
     if referer is None:
         # Handle the case where referer is missing
         # You can raise an HTTPException or handle it in another appropriate way
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail="Sorry, you don't have permission to access this. Please check your access rights or contact support for help")
     
     # Normalizing the referer by stripping the trailing slash if it exists
     normalized_referer = referer.rstrip('/')
     # Check if the referer is from the allowed origins
     if normalized_referer not in allowed_origins:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail="Sorry, you don't have permission to access this. Please check your access rights or contact support for help")
     
     # Obtain the redirect URI as a URL object
     redirect_uri: URL = request.url_for('authorize_google')
@@ -344,7 +344,7 @@ async def authorize_google(request: Request):
                 # Create a query string with the token data
                 return RedirectResponse(url=FRONTEND_URL + "/googleauth?token=" + return_token)
         else:
-            raise HTTPException(status_code=401, detail="Invalid credentials")
+            raise HTTPException(status_code=401, detail="Your login details didn't match our records. Please check and try again.")
 
     except authlib.integrations.base_client.errors.MismatchingStateError:
         # The state parameter does not match the session state
@@ -523,7 +523,7 @@ def priority(dataframe, dictionary, selected_fos):
         return final_result
     except Exception as e:
         print(f"Error processing request in priority: {e}")
-        raise HTTPException(status_code=500, detail=f"Error processing request in priority: {e}")
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.", err=f"Error processing request in priority: {e}")
 
 def calibre_checker(df: pd.DataFrame, language_proficiency, my_marks):
     try:
@@ -553,7 +553,7 @@ def calibre_checker(df: pd.DataFrame, language_proficiency, my_marks):
 
         return eligible, noteligible
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing request : {e}")
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.", err=f"Error processing request : {e}")
 
 def cleandict(my_dict):
     for key in list(my_dict.keys()):
@@ -686,7 +686,7 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         selected_level = received_dictionary["Level"].lower()
 
         if selected_fos == "":
-            response = {"Error": "Please Select A Field Of Study"}
+            response = {"Error": "Looks like you missed selecting a field of study. Please make a selection to move forward."}
             raise HTTPException(status_code=500, detail=response)
         
         openai.api_key = os.getenv("OPEN_AI_KEY")
@@ -973,7 +973,7 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
                 }
             )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing request : {e}")
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.", err=f"Error processing request : {e}")
 
 def is_email_present(email: str) -> bool:
     """Check if the email is already in the database."""
@@ -1031,7 +1031,7 @@ def send_otp(request: EmailRequest):
                 "Message": "Email Verification Mail Sent Into Your Mailbox",
             }
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Error sending email", err=str(e))
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.", err=str(e))
 
 @app.post("/api/verification")
 def verification(request: AuthRequest):
@@ -1064,10 +1064,10 @@ def verification(request: AuthRequest):
         else:
             return {
                 "Status": "Failure",
-                "Message": "Verification Failed. User not found or already verified.",
+                "Message": "Verification failed: User account not found or already verified. Please check your details.",
             }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Verfication Failed: {e}")
+        raise HTTPException(status_code=500, detail="Verification didn't go through. Please double-check your information and try again.", err=f"Verfication Failed: {e}")
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
@@ -1137,11 +1137,11 @@ def login(request: LoginRequest):
                     refresh_token = create_refresh_token(data=refresh_token_data)
                     return {"access_token": access_token,"refresh_token": refresh_token, "token_type": "bearer"}
                 else:
-                    raise HTTPException(status_code=401, detail="Invalid password")
+                    raise HTTPException(status_code=401, detail="Your password is incorrect. Please try again.")
             else:
-                raise HTTPException(status_code=403, detail="User not verified")
+                raise HTTPException(status_code=403, detail="Your account hasn't been verified yet. Please check your email for the verification link.")
         else:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail="We couldn't find your account. Please double-check your information and try again.")
 
     except HTTPException as http_exc:
         # If it's an HTTPException, we just re-raise it
@@ -1149,7 +1149,7 @@ def login(request: LoginRequest):
         raise http_exc
     except Exception as e:
         # For any other kind of exception, it's an internal server error
-        raise HTTPException(status_code=500, detail=f"Login Failed: {e}")
+        raise HTTPException(status_code=500, detail="Login failed. Please check your credentials and try again", err=f"Login Failed: {e}")
 
 @app.get("/api/profile-info")
 def profile_info(email: str = Depends(get_current_user)):
@@ -1162,14 +1162,14 @@ def profile_info(email: str = Depends(get_current_user)):
             json_compatible_item_data = json.loads(json.dumps(users[0], cls=CustomJSONEncoder))
             return JSONResponse(content=json_compatible_item_data)
         else:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail="We couldn't find your account. Please double-check your information and try again.")
     except HTTPException as http_exc:
         # If it's an HTTPException, we just re-raise it
         # This is assuming HTTPException is meant to be used for HTTP status-related errors
         raise http_exc
     except Exception as e:
         # For any other kind of exception, it's an internal server error
-        raise HTTPException(status_code=500, detail=f"Profile Info Failed: {e}")
+        raise HTTPException(status_code=500, detail="Couldn't load profile info. Please refresh and try again.", err=f"Profile Info Failed: {e}")
     
 @app.put("/api/update-profile-info")
 def profile_info(request: ProfileInfoRequest, email: str = Depends(get_current_user)):
@@ -1180,14 +1180,14 @@ def profile_info(request: ProfileInfoRequest, email: str = Depends(get_current_u
         if users==1:
             return{"Status": "Success", "Message":"Profile Info Updated" }
         else:
-            raise HTTPException(status_code=404, detail="User not found OR There Nothing To Update")
+            raise HTTPException(status_code=404, detail="No user found or nothing to update. Please check your details and try again.")
     except HTTPException as http_exc:
         # If it's an HTTPException, we just re-raise it
         # This is assuming HTTPException is meant to be used for HTTP status-related errors
         raise http_exc
     except Exception as e:
         # For any other kind of exception, it's an internal server error
-        raise HTTPException(status_code=500, detail=f"Profile Info Failed: {e}")
+        raise HTTPException(status_code=500, detail="Couldn't load profile info. Please refresh and try again.", err=f"Profile Info Failed: {e}")
 
 @app.post("/api/fogot-password")
 def forgot_password(request: ForgetRequest):
@@ -1206,7 +1206,7 @@ def forgot_password(request: ForgetRequest):
                 "Message": "Account not found. Please verify the information provided and try again, or create a new account if you don't have one."
             }   
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Error sending email {e}", err=str(e))
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.", err=str(e))
 
 @app.post("/api/reset-password")
 def reset_password(request: ResetPasswordRequest):
@@ -1232,7 +1232,7 @@ def reset_password(request: ResetPasswordRequest):
                 "Message": "Password Updation Failed. Invalid Request",
             }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Password Updation Failed: {e}")
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.", err=f"Password Updation Failed: {e}")
 
 def update_course_details(course_str):
     # Initialize keywords
@@ -1315,7 +1315,7 @@ def visa_pr_prob(request: VisaPRRequest, email: str = Depends(get_current_user))
         # This is assuming HTTPException is meant to be used for HTTP status-related errors
         raise http_exc
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing request : {e}")
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.", err=f"Error processing request : {e}")
 
 def decrypt_with_aes(ciphertext, secret_key):
     key = b64decode(secret_key)
@@ -1338,7 +1338,7 @@ def sop_sowp_builder(request: EncryptedRequest, email: str = Depends(get_current
         result = GPTfunction(messages, usedmodel=decrypted_data["model"], max_tokens_count=decrypted_data["maxtoken"])
         return {"Status": "Success", "Letter": result}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing request : {e}")
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.", err=f"Error processing request : {e}")
 
 @app.get("/")
 def root():
@@ -1358,7 +1358,7 @@ def get_dropdowns(email: str = Depends(get_current_user)):
         unique_province.insert(0, "Any Province")
         return {"Status": "Success", "Level": unique_level, "FieldOfStudy": unique_fos, "Province": unique_province}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing request : {e}")
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.", err=f"Error processing request : {e}")
 
 
 @app.get('/api/userRole')
