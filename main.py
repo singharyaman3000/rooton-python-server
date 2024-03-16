@@ -120,6 +120,11 @@ class ProfileInfoRequest(BaseModel):
 class ProfileInfoResponse(BaseModel):
     responsedata: dict
 
+# Define a custom response model if needed
+class ErrorResponseModel(BaseModel):
+    detail: str
+    err: str
+
 # Function to fetch all data (similar to your script)
 @cached(cache)
 def fetch_all_data(database, collection):
@@ -228,6 +233,17 @@ async def preload_cache():
 
 
 app.add_event_handler("startup", preload_cache)
+
+@app.exception_handler(Exception)
+async def exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content=ErrorResponseModel(
+            detail="We're having trouble processing your request right now. Please try again later.",
+            err=str(exc)
+        ).dict(),
+    )
+
 
 # Secret key to encode the JWT token (should be kept secret)
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -352,7 +368,7 @@ async def authorize_google(request: Request):
     except Exception as e:
         # Log the error and return a generic error response to the user
         logging.exception("An error occurred during the OAuth callback.")
-        raise HTTPException(status_code=500, detail="An internal server error occurred.", err=str(e))
+        raise HTTPException(status_code=500, detail="An internal server error occurred.")
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
     credentials_exception = HTTPException(
@@ -523,7 +539,7 @@ def priority(dataframe, dictionary, selected_fos):
         return final_result
     except Exception as e:
         print(f"Error processing request in priority: {e}")
-        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.", err=f"Error processing request in priority: {e}")
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
 def calibre_checker(df: pd.DataFrame, language_proficiency, my_marks):
     try:
@@ -553,7 +569,8 @@ def calibre_checker(df: pd.DataFrame, language_proficiency, my_marks):
 
         return eligible, noteligible
     except Exception as e:
-        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.", err=f"Error processing request : {e}")
+        print(f"Error processing request: {e}")
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
 def cleandict(my_dict):
     for key in list(my_dict.keys()):
@@ -973,7 +990,8 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
                 }
             )
     except Exception as e:
-        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.", err=f"Error processing request : {e}")
+        print(f"Error processing request in priority: {e}")
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
 def is_email_present(email: str) -> bool:
     """Check if the email is already in the database."""
@@ -1031,7 +1049,8 @@ def send_otp(request: EmailRequest):
                 "Message": "Email Verification Mail Sent Into Your Mailbox",
             }
     except Exception as e:
-        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.", err=str(e))
+        print(f"Error processing request: {e}")
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
 @app.post("/api/verification")
 def verification(request: AuthRequest):
@@ -1067,7 +1086,8 @@ def verification(request: AuthRequest):
                 "Message": "Verification failed: User account not found or already verified. Please check your details.",
             }
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Verification didn't go through. Please double-check your information and try again.", err=f"Verfication Failed: {e}")
+        print(f"Verfication Failed: {e}")
+        raise HTTPException(status_code=500, detail="Verification didn't go through. Please double-check your information and try again.")
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
@@ -1149,7 +1169,8 @@ def login(request: LoginRequest):
         raise http_exc
     except Exception as e:
         # For any other kind of exception, it's an internal server error
-        raise HTTPException(status_code=500, detail="Login failed. Please check your credentials and try again", err=f"Login Failed: {e}")
+        print(f"Login Failed: {e}")
+        raise HTTPException(status_code=500, detail="Login failed. Please check your credentials and try again")
 
 @app.get("/api/profile-info")
 def profile_info(email: str = Depends(get_current_user)):
@@ -1169,7 +1190,8 @@ def profile_info(email: str = Depends(get_current_user)):
         raise http_exc
     except Exception as e:
         # For any other kind of exception, it's an internal server error
-        raise HTTPException(status_code=500, detail="Couldn't load profile info. Please refresh and try again.", err=f"Profile Info Failed: {e}")
+        print(f"Profile Info Failed: {e}")
+        raise HTTPException(status_code=500, detail="Couldn't load profile info. Please refresh and try again.")
     
 @app.put("/api/update-profile-info")
 def profile_info(request: ProfileInfoRequest, email: str = Depends(get_current_user)):
@@ -1187,7 +1209,8 @@ def profile_info(request: ProfileInfoRequest, email: str = Depends(get_current_u
         raise http_exc
     except Exception as e:
         # For any other kind of exception, it's an internal server error
-        raise HTTPException(status_code=500, detail="Couldn't load profile info. Please refresh and try again.", err=f"Profile Info Failed: {e}")
+        print(f"Profile Info Failed: {e}")
+        raise HTTPException(status_code=500, detail="Couldn't load profile info. Please refresh and try again.")
 
 @app.post("/api/fogot-password")
 def forgot_password(request: ForgetRequest):
@@ -1206,7 +1229,8 @@ def forgot_password(request: ForgetRequest):
                 "Message": "Account not found. Please verify the information provided and try again, or create a new account if you don't have one."
             }   
     except Exception as e:
-        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.", err=str(e))
+        print(f"Error processing request: {e}")
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
 @app.post("/api/reset-password")
 def reset_password(request: ResetPasswordRequest):
@@ -1232,7 +1256,8 @@ def reset_password(request: ResetPasswordRequest):
                 "Message": "Password Updation Failed. Invalid Request",
             }
     except Exception as e:
-        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.", err=f"Password Updation Failed: {e}")
+        print(f"Password Updation Failed: {e}")
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
 def update_course_details(course_str):
     # Initialize keywords
@@ -1315,7 +1340,8 @@ def visa_pr_prob(request: VisaPRRequest, email: str = Depends(get_current_user))
         # This is assuming HTTPException is meant to be used for HTTP status-related errors
         raise http_exc
     except Exception as e:
-        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.", err=f"Error processing request : {e}")
+        print(f"Error processing request : {e}")
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
 def decrypt_with_aes(ciphertext, secret_key):
     key = b64decode(secret_key)
@@ -1338,7 +1364,8 @@ def sop_sowp_builder(request: EncryptedRequest, email: str = Depends(get_current
         result = GPTfunction(messages, usedmodel=decrypted_data["model"], max_tokens_count=decrypted_data["maxtoken"])
         return {"Status": "Success", "Letter": result}
     except Exception as e:
-        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.", err=f"Error processing request : {e}")
+        print(f"Error processing request : {e}")
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
 @app.get("/")
 def root():
@@ -1358,7 +1385,8 @@ def get_dropdowns(email: str = Depends(get_current_user)):
         unique_province.insert(0, "Any Province")
         return {"Status": "Success", "Level": unique_level, "FieldOfStudy": unique_fos, "Province": unique_province}
     except Exception as e:
-        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.", err=f"Error processing request : {e}")
+        print(f"Error processing request : {e}")
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
 
 @app.get('/api/userRole')
