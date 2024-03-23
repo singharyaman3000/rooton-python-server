@@ -53,6 +53,9 @@ app.add_middleware(
 
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("Session_SECRET_KEY"))
 
+# Pandas ki SettingWithCopyWarning ko globally suppress karna
+pd.options.mode.chained_assignment = None  # default='warn'
+
 # Pydantic models for request and response
 class CourseRequest(BaseModel):
     fos: str
@@ -398,25 +401,30 @@ def process_budget(budget_str):
 
 
 def GPTfunction(messages, max_tokens_count=350, text=False, usedmodel="gpt-4"):
-    openai.api_key = os.getenv("OPEN_AI_KEY")
-    if text:
-        response = openai.Completion.create(
-            model=usedmodel,
-            prompt=messages,
-            temperature=0.7,
-            max_tokens=max_tokens_count,
-        )
-        message = response["choices"][0]["text"]
-        return message
-    else:
-        response = openai.ChatCompletion.create(
-            model=usedmodel,
-            messages=messages,
-            # temperature=0.7,
-            max_tokens=max_tokens_count,
-        )
-        message = response["choices"][0]["message"]["content"]
-        return message
+    try:
+        openai.api_key = os.getenv("OPEN_AI_KEY")
+        if text:
+            response = openai.Completion.create(
+                model=usedmodel,
+                prompt=messages,
+                temperature=0.7,
+                max_tokens=max_tokens_count,
+            )
+            message = response["choices"][0]["text"]
+            return message
+        else:
+            response = openai.ChatCompletion.create(
+                model=usedmodel,
+                messages=messages,
+                # temperature=0.7,
+                max_tokens=max_tokens_count,
+            )
+            message = response["choices"][0]["message"]["content"]
+            return message
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=429, detail="LLM Function Error")
+        
 
 
 def priority1(dataframe, dictionary, selected_fos):
@@ -816,7 +824,7 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
             {"Seasons": seasons, "Status": statuses, "Deadline": deadlines}
         )
         fill = pd.concat([fill.drop("Intake", axis=1), intake_df], axis=1)
-        if len(dictionary) == 1:
+        if len(dictionary) == 2:
             recommended_course_names = fill
         else:
             recommended_course_names = priority1(fill, dictionary, selected_fos)
@@ -989,8 +997,12 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
                     "response_time": response_time,
                 }
             )
+    except HTTPException as http_exc:
+        # If it's an HTTPException, we just re-raise it
+        # This is assuming HTTPException is meant to be used for HTTP status-related errors
+        raise http_exc
     except Exception as e:
-        print(f"Error processing request in priority: {e}")
+        print(f"Error processing request in CRS: {e}")
         raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
 def is_email_present(email: str) -> bool:
@@ -1202,7 +1214,11 @@ def profile_info(request: ProfileInfoRequest, email: str = Depends(get_current_u
         if users==1:
             return{"Status": "Success", "Message":"Profile Info Updated" }
         else:
-            raise HTTPException(status_code=404, detail="No user found or nothing to update. Please check your details and try again.")
+            usersread = perform_database_operation("test", "userdetails", "read", {"email": email})
+            if usersread and len(usersread) > 0:
+                return{"Status": "Success", "Message":"Profile Info Updated" }
+            else:
+                raise HTTPException(status_code=404, detail="We couldn't find your account. Please double-check your information and try again.")
     except HTTPException as http_exc:
         # If it's an HTTPException, we just re-raise it
         # This is assuming HTTPException is meant to be used for HTTP status-related errors
