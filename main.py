@@ -32,6 +32,7 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from base64 import b64decode
 from starlette.datastructures import URL
+import traceback
 
 load_dotenv()
 
@@ -150,6 +151,14 @@ def fetch_all_data(database, collection):
 
     return results
 
+def fetch_collection(database, collection):
+    MONGODB_URI = os.getenv("MONGODB_URI")
+    client = pymongo.MongoClient(MONGODB_URI)
+
+    db = client[database]
+    collection = db[collection]
+
+    return collection
 
 
 def perform_database_operation(database, collection_name, operation_type, query=None, update_data=None):
@@ -226,7 +235,7 @@ async def preload_cache():
     try:
         # Preload data for each collection
         print("caching started")
-        fetch_all_data("test", "userdetails")
+        fetch_collection("test", "courses")
         print("caching done 1")
         fetch_all_data("test", "courses")
         print("caching done 2")
@@ -577,7 +586,7 @@ def calibre_checker(df: pd.DataFrame, language_proficiency, my_marks):
 
         return eligible, noteligible
     except Exception as e:
-        print(f"Error processing request: {e}")
+        print(f"Error processing request in Calibre Checker: {e}")
         raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
 def cleandict(my_dict):
@@ -588,32 +597,49 @@ def cleandict(my_dict):
             del my_dict[key]
     return my_dict
 
+def data_preciser(received_dictionary, creation_df):
+    try:
+        levels = received_dictionary["Level"].split(', ')
+        language = ["English"]
+        if received_dictionary["Province"] == "Any Province" or received_dictionary["Province"] == "":
+                provinces = ["Alberta","British Columbia","Manitoba","New Brunswick","Newfoundland and Labrador",
+                             "Northwest Territories","Nova Scotia","Ontario","Prince Edward Island",
+                             "Quebec","Saskatchewan","Yukon Territory"]
+                college_df = creation_df[(creation_df['Level'].isin(levels)) & creation_df['Language'].isin(language)]
+        else:
+            provinces = received_dictionary["Province"].split(', ')
+            college_df = creation_df[(creation_df['Level'].isin(levels)) & (creation_df['Province'].isin(provinces)) & creation_df['Language'].isin(language)]
+        return college_df
+    except Exception as e:
+            print(f"Error processing request in preciser: {e}")
+            raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
-def core_model(fos, level, college_df):
+def core_model(fos, level, college_df, gptifcondition=False):
     if level != "false" or fos != "false":
-        college_df["IeltsOverall"] = college_df["IeltsOverall"].astype(float).round(1)
-        college_df["Length"] = (
-            college_df["Length"]
-            .astype("str")
-            .str.extractall("(\d+)")
-            .unstack()
-            .fillna("")
-            .sum(axis=1)
-            .astype(int)
-        )
-        college_df["FeeText"] = college_df["Fee"]
-        college_df["Fee"] = college_df.Fee.str.extract("(\d+)")
+        if gptifcondition==False:
+            college_df["IeltsOverall"] = college_df["IeltsOverall"].astype(float).round(1)
+            college_df["Length"] = (
+                college_df["Length"]
+                .astype("str")
+                .str.extractall("(\d+)")
+                .unstack()
+                .fillna("")
+                .sum(axis=1)
+                .astype(int)
+            )
+            college_df["FeeText"] = college_df["Fee"]
+            college_df["Fee"] = college_df.Fee.str.extract("(\d+)")
 
-        college_df["Fee"] = college_df["Fee"].astype(int)
-        college_df[
-            ["FieldOfStudy", "Province", "InstituteName", "Title", "Level"]
-        ] = college_df[
-            ["FieldOfStudy", "Province", "InstituteName", "Title", "Level"]
-        ].astype(
-            str
-        )
+            college_df["Fee"] = college_df["Fee"].astype(int)
+            college_df[
+                ["FieldOfStudy", "Province", "InstituteName", "Title", "Level"]
+            ] = college_df[
+                ["FieldOfStudy", "Province", "InstituteName", "Title", "Level"]
+            ].astype(
+                str
+            )
 
-        college_df[["Length", "Fee"]] = college_df[["Length", "Fee"]].astype(int)
+            college_df[["Length", "Fee"]] = college_df[["Length", "Fee"]].astype(int)
 
         comb_frame = (
             college_df["FieldOfStudy"].astype(str)
@@ -632,9 +658,6 @@ def core_model(fos, level, college_df):
         Input_transform = vectorizer.transform([Query_Input])
 
         pairwise_kernels = sk.pairwise_kernels(Input_transform, X).flatten()
-
-        # # Modify this part to include weights
-        pairwise_kernels = pairwise_kernels
 
         related_docs_indices = pairwise_kernels.argsort()[:-59:-1]
 
@@ -655,7 +678,6 @@ def core_model(fos, level, college_df):
 @app.post("/api/recommend_courses", response_model=CourseResponse)
 async def recommend_courses(request: CourseRequest, email: str = Depends(get_current_user)):
     try:
-        # print("recieved Request", request)
         start = time.time()
         my_dict = request.dictionary
         received_dictionary = {}
@@ -691,22 +713,10 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         value = fetch_all_data("test", "courses")
         creation_df = pd.DataFrame(value)
 
-        # college_df = creation_df[creation_df['Level'] == received_dictionary["Level"]]
-        # college_df = creation_df[(creation_df['Level'] == received_dictionary["Level"]) & (creation_df['Province'] != 'Ontario')]
-        levels = received_dictionary["Level"].split(', ')
-        if received_dictionary["Province"] == "Any Province" or received_dictionary["Province"] == "":
-            provinces = ["Alberta","British Columbia","Manitoba","New Brunswick","Newfoundland and Labrador",
-                         "Northwest Territories","Nova Scotia","Ontario","Prince Edward Island",
-                         "Quebec","Saskatchewan","Yukon Territory"]
-            college_df = creation_df[(creation_df['Level'].isin(levels))]
+        if received_dictionary["Seasons"]=="":
+            college_df = data_preciser(received_dictionary,creation_df)
         else:
-            provinces = received_dictionary["Province"].split(', ')
-            college_df = creation_df[(creation_df['Level'].isin(levels)) & (creation_df['Province'].isin(provinces))]
-
-
-        # userdetails = perform_database_operation(
-        #     "test", "userdetails", "read", {"email": email}
-        # )
+            college_df = pd.concat([intake_preciser(received_dictionary["Seasons"]), data_preciser(received_dictionary,creation_df)], ignore_index=True).drop_duplicates(subset="_id", keep="first")
         selected_fos = received_dictionary["Title"]
         selected_level = received_dictionary["Level"].lower()
 
@@ -715,28 +725,11 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
             raise HTTPException(status_code=500, detail=response)
         
         openai.api_key = os.getenv("OPEN_AI_KEY")
-        # messages = [{
-        #     "role": "system",
-        #     "content": "Generate a list of 18 courses related to " + selected_fos + " that are available at Canadian universities or colleges, including a mix of undergraduate, postgraduate, and certification programs if applicable."
-        #     },
-        #     {
-        #     "role": "user",
-        #     "content": "I'm interested in"+ selected_fos
-        #     },]
 
-
-        # messages = "List 18 courses related to " + selected_fos + " that can be studied in canada"
-        # # messages = (
-        # #     "Generate a list of 18 courses related to "
-        # #     + selected_fos
-        # #     + " that are available at Canadian universities or colleges, including a mix of undergraduate, postgraduate, and certification programs if applicable."
-        # # )
-
-        # selected_fos = GPTfunction(messages, text=True, max_tokens_count=3000, usedmodel="gpt-3.5-turbo-instruct") + " " + selected_fos
+        core_selected_fos=selected_fos
         if not request.toggle:
             messages = "Give me relevant keywords around " + selected_fos +", also try to give me words which are spelled differently in the world related to "+ selected_fos +" (this is just one of the example --> Jewellery, Jewelery) also try to break and concate word and make a cluster of relevent keywords in canada"
-            selected_fos = GPTfunction(messages, text=True, max_tokens_count=3000, usedmodel="gpt-3.5-turbo-instruct") + " " + selected_fos
-
+            selected_fos = selected_fos + " " + GPTfunction(messages, text=True, max_tokens_count=3000, usedmodel="gpt-3.5-turbo-instruct")
 
         title = selected_fos
         x = title.replace(",", " ")
@@ -761,7 +754,14 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
 
         selected_fos = " ".join(selected_fos)
 
-        fill = core_model(selected_fos, selected_level, college_df) #Warning in the console comes from this function
+        core_fill = core_model(core_selected_fos, selected_level, college_df) #Warning in the console comes from this function
+        gpt_fill = core_model(selected_fos, selected_level, college_df, gptifcondition=True) #Warning in the console comes from this function
+
+        # Concatenate dataframes one below the other (axis=0 by default)
+        df_concatenated = pd.concat([core_fill, gpt_fill])
+        # Reset the index for the concatenated dataframe
+        fill = df_concatenated.reset_index(drop=True)
+
 
         fill["_id"] = fill["_id"].astype(str)
         for i in range(len(fill["Intake"])):
@@ -800,34 +800,15 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
             seasons.append(", ".join(d_seasons))
             statuses.append(", ".join(d_statuses))
             deadlines.append(", ".join(d_deadlines))
-        # print("Processing completed successfully")
-
-        # print("ye for loop mein locha hai worked till here")
-        # for d in fill["Intake"]:
-        #     intake = d
-
-        #     d_seasons = []
-        #     d_statuses = []
-        #     d_deadlines = []
-
-        #     for i in intake:
-        #         d_seasons.append(i["season"])
-        #         d_statuses.append(i["status"])
-        #         d_deadlines.append(i["deadline"])
-
-        #     seasons.append(", ".join(d_seasons))
-        #     statuses.append(", ".join(d_statuses))
-        #     deadlines.append(", ".join(d_deadlines))
-        # print("ye for loop mein locha hai worked till here")
 
         intake_df = pd.DataFrame(
             {"Seasons": seasons, "Status": statuses, "Deadline": deadlines}
         )
         fill = pd.concat([fill.drop("Intake", axis=1), intake_df], axis=1)
-        if len(dictionary) == 2:
+        if len(dictionary) == 2 or fill.empty:
             recommended_course_names = fill
         else:
-            recommended_course_names = priority1(fill, dictionary, selected_fos)
+            recommended_course_names = priority1(fill, dictionary, core_selected_fos)
             # recommended_course_names = fill
 
         recommended_course_names.drop(
@@ -848,14 +829,7 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
             inplace=True,
         )
 
-        # if LanguageProficiency:
-        #     if userdetails[0]["Scores"]["IELTS"]["Overall"]:
-        #         IELTS_O = userdetails[0]["Scores"]["IELTS"]["Overall"]
-        #     else:
-                
-        #         IELTS_O = 6.5 #Conditioning is remaining...
-        # else:
-        #     IELTS_O = 6.5
+
         if (request.LanguageProficiency!=""):
             eligible1, noteligible1 = calibre_checker(recommended_course_names, request.LanguageProficiency,request.Score)
 
@@ -928,11 +902,11 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
             )
 
             eligible1.fillna("N/A", inplace=True)
-            eligible1 = eligible1.head(31)
+            # eligible1 = eligible1.head(31)
 
             noteligible1.fillna("N/A", inplace=True)
             # eligible1.to_csv("recommendations.csv", index=False, header=True)
-            noteligible1 = noteligible1.head(31)
+            # noteligible1 = noteligible1.head(31)
 
             recommendData = eligible1.to_dict("records")
             end = time.time()
@@ -953,6 +927,7 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
                 if x >= 12
                 else f"{x} Months"
             )
+
             eligible1 = eligible1.reindex(
                 columns=[
                     "CreatedOn",
@@ -983,7 +958,7 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
             )
 
             eligible1.fillna("N/A", inplace=True)
-            eligible1 = eligible1.head(31)
+            # eligible1 = eligible1.head(31)
 
             recommendData = eligible1.to_dict("records")
             end = time.time()
@@ -1002,7 +977,8 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         # This is assuming HTTPException is meant to be used for HTTP status-related errors
         raise http_exc
     except Exception as e:
-        print(f"Error processing request in CRS: {e}")
+        traceback_str = ''.join(traceback.format_tb(e.__traceback__))
+        print(f"Error processing request in CRS: {e}\nTraceback: {traceback_str}")
         raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
 def is_email_present(email: str) -> bool:
@@ -1424,6 +1400,27 @@ def getUserRole(email: str = Depends(get_current_user)):
         # For any other kind of exception, it's an internal server error
         raise HTTPException(status_code=500, detail=f"Role Info Fetch Failed: {e}")
 
+def intake_preciser(IntakeRequest):
+    # Connect to the MongoDB client using the URI from the environment variables
+    collection = fetch_collection("test", "courses")
+    
+    # DataFrame to store documents containing the target season
+    documents_with_target_season = pd.DataFrame()
+
+    # Iterate through all documents in the collection
+    for document in collection.find():
+        # Check if 'Intake' key exists and is an array
+        if 'Intake' in document and isinstance(document['Intake'], list):
+            # Iterate through each item in the 'Intake' array
+            for intake in document['Intake']:
+                # Check if 'season' key exists and matches the target season
+                if 'season' in intake and intake['season'] == IntakeRequest:
+                    # Convert the document to a DataFrame and append it
+                    document['_id'] = str(document['_id'])
+                    document_df = pd.DataFrame([document])
+                    documents_with_target_season = pd.concat([documents_with_target_season, document_df], ignore_index=True)
+
+    return documents_with_target_season
 
 if __name__ == "__main__":
     import uvicorn
