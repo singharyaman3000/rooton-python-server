@@ -235,10 +235,8 @@ async def preload_cache():
     try:
         # Preload data for each collection
         print("caching started")
-        fetch_collection("test", "courses")
-        print("caching done 1")
         fetch_all_data("test", "courses")
-        print("caching done 2")
+        print("caching done 1")
         # Add more collections as needed
     except Exception as e:
         print(f"Error during cache preloading: {e}")
@@ -592,7 +590,7 @@ def calibre_checker(df: pd.DataFrame, language_proficiency, my_marks):
 def cleandict(my_dict):
     for key in list(my_dict.keys()):
         # Check if the value of the key is an empty string, zero or None
-        if my_dict[key] in ["", 0, None,"Any Province"]:
+        if my_dict[key] in ["", 0, None,"any province"]:
             # If the value meets the specified criteria, remove the key
             del my_dict[key]
     return my_dict
@@ -690,7 +688,7 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
             elif key == "Duration":
                 new_key = "Length"
             elif key == "Intake":
-                new_key = "Seasons"
+                new_key = "Seasons1"
             received_dictionary[new_key] = my_dict[key]
         received_dictionary["Length"] = int(received_dictionary.get("Length", 0) or 0)
         if received_dictionary["Fee"] == "":
@@ -712,11 +710,10 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         received_dictionary.pop("Intake")
         value = fetch_all_data("test", "courses")
         creation_df = pd.DataFrame(value)
-
-        if received_dictionary["Seasons"]=="":
+        if received_dictionary["Seasons1"]=="":
             college_df = data_preciser(received_dictionary,creation_df)
         else:
-            college_df = pd.concat([intake_preciser(received_dictionary["Seasons"]), data_preciser(received_dictionary,creation_df)], ignore_index=True).drop_duplicates(subset="_id", keep="first")
+            college_df = pd.concat([intake_preciser(received_dictionary["Seasons1"]), data_preciser(received_dictionary,creation_df)], ignore_index=True).drop_duplicates(subset="_id", keep="first")
         selected_fos = received_dictionary["Title"]
         selected_level = received_dictionary["Level"].lower()
 
@@ -748,7 +745,7 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
 
         received_dictionary["Level"] = received_dictionary["Level"].lower()
         received_dictionary["Province"] = received_dictionary["Province"].lower()
-        received_dictionary["Seasons"] = received_dictionary["Seasons"].lower()
+        received_dictionary["Seasons1"] = received_dictionary["Seasons1"].lower()
         dictionary = received_dictionary
         dictionary = cleandict(dictionary)
 
@@ -758,8 +755,8 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         gpt_fill = core_model(selected_fos, selected_level, college_df, gptifcondition=True) #Warning in the console comes from this function
 
         # Concatenate dataframes one below the other (axis=0 by default)
-        df_concatenated = pd.concat([core_fill, gpt_fill])
-        # Reset the index for the concatenated dataframe
+        df_concatenated = pd.concat([core_fill, gpt_fill]).drop_duplicates(subset="_id", keep="first")
+        # # Reset the index for the concatenated dataframe
         fill = df_concatenated.reset_index(drop=True)
 
 
@@ -905,7 +902,6 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
             # eligible1 = eligible1.head(31)
 
             noteligible1.fillna("N/A", inplace=True)
-            # eligible1.to_csv("recommendations.csv", index=False, header=True)
             # noteligible1 = noteligible1.head(31)
 
             recommendData = eligible1.to_dict("records")
@@ -1401,26 +1397,30 @@ def getUserRole(email: str = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=f"Role Info Fetch Failed: {e}")
 
 def intake_preciser(IntakeRequest):
-    # Connect to the MongoDB client using the URI from the environment variables
-    collection = fetch_collection("test", "courses")
+    # Assuming 'documents' is a list of dictionaries directly fetched from the database
+    # Fetch the entire collection data once, leveraging caching
+    documents = fetch_all_data("test", "courses")
     
-    # DataFrame to store documents containing the target season
-    documents_with_target_season = pd.DataFrame()
+    # Convert the entire dataset to a DataFrame in one go
+    df = pd.DataFrame(documents)
+    
+    # Ensure the '_id' field is converted to string format, this will apply the operation across the entire DataFrame
+    df['_id'] = df['_id'].astype(str)
+    
+    # Expand the 'Intake' dictionaries into separate DataFrame rows, preserving the association with the parent document
+    # This creates a new row for each item in each document's 'Intake' list, effectively normalizing the nested structure
+    intake_df = df.explode('Intake').reset_index(drop=True)
 
-    # Iterate through all documents in the collection
-    for document in collection.find():
-        # Check if 'Intake' key exists and is an array
-        if 'Intake' in document and isinstance(document['Intake'], list):
-            # Iterate through each item in the 'Intake' array
-            for intake in document['Intake']:
-                # Check if 'season' key exists and matches the target season
-                if 'season' in intake and intake['season'] == IntakeRequest:
-                    # Convert the document to a DataFrame and append it
-                    document['_id'] = str(document['_id'])
-                    document_df = pd.DataFrame([document])
-                    documents_with_target_season = pd.concat([documents_with_target_season, document_df], ignore_index=True)
+    # Filter out rows where 'Intake' is None or does not contain the expected keys ('season', 'status', 'deadline')
+    # This step also filters based on the 'season' matching the 'IntakeRequest'
+    filtered_df = intake_df[
+        intake_df['Intake'].apply(lambda x: isinstance(x, dict) and x.get('season') == IntakeRequest if x else False)
+    ]
 
-    return documents_with_target_season
+    # If necessary, further processing can be done here to structure the data as needed
+    filtered_df['Seasons1'] = IntakeRequest
+    filtered_df['Intake'] = filtered_df['Intake'].apply(lambda x: x if isinstance(x, list) else [x])
+    return filtered_df
 
 if __name__ == "__main__":
     import uvicorn
