@@ -436,6 +436,7 @@ def GPTfunction(messages, max_tokens_count=350, text=False, usedmodel="gpt-4"):
 
 def priority1(dataframe, dictionary, selected_fos):
     results = []
+    dictionary = {k: v for k, v in dictionary.items() if k not in ['Level', 'Province']}
     df_copy = dataframe.copy()
     for i in range(len(dictionary), 0, -1):
         df_copy = dataframe.copy()
@@ -558,8 +559,9 @@ def priority(dataframe, dictionary, selected_fos):
 
 def calibre_checker(df: pd.DataFrame, language_proficiency, my_marks):
     try:
+        
         noteligible = pd.DataFrame(columns=df.columns)
-        df = df.drop_duplicates()
+        df = df.drop_duplicates(subset="_id", keep="first")
         df = df.reset_index(drop=True)
 
 
@@ -584,7 +586,8 @@ def calibre_checker(df: pd.DataFrame, language_proficiency, my_marks):
 
         return eligible, noteligible
     except Exception as e:
-        print(f"Error processing request in Calibre Checker: {e}")
+        traceback_str = ''.join(traceback.format_tb(e.__traceback__))
+        print(f"Error processing request in Calibre Checker: {e}\nTraceback: {traceback_str}")
         raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
 def cleandict(my_dict):
@@ -603,13 +606,17 @@ def data_preciser(received_dictionary, creation_df):
                 provinces = ["Alberta","British Columbia","Manitoba","New Brunswick","Newfoundland and Labrador",
                              "Northwest Territories","Nova Scotia","Ontario","Prince Edward Island",
                              "Quebec","Saskatchewan","Yukon Territory"]
-                college_df = creation_df[(creation_df['Level'].isin(levels)) & creation_df['Language'].isin(language)]
+                new_college_df = creation_df[(creation_df['Level'].isin(levels)) & creation_df['Language'].isin(language)]
         else:
             provinces = received_dictionary["Province"].split(', ')
-            college_df = creation_df[(creation_df['Level'].isin(levels)) & (creation_df['Province'].isin(provinces)) & creation_df['Language'].isin(language)]
-        return college_df
+            new_college_df = creation_df[(creation_df['Level'].isin(levels)) & (creation_df['Province'].isin(provinces)) & creation_df['Language'].isin(language)]
+        new_college_df["Level1"]=received_dictionary["Level"]
+        new_college_df["Province1"]=received_dictionary["Province"]
+        return pd.DataFrame(new_college_df)
     except Exception as e:
-            print(f"Error processing request in preciser: {e}")
+            traceback_str = ''.join(traceback.format_tb(e.__traceback__))
+            print(f"Error processing request in Data Preciser: {e}\nTraceback: {traceback_str}")
+            print(f"Error processing request in Data Preciser: {e}")
             raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
 def core_model(fos, level, college_df, gptifcondition=False):
@@ -713,7 +720,12 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         if received_dictionary["Seasons1"]=="":
             college_df = data_preciser(received_dictionary,creation_df)
         else:
-            college_df = pd.concat([intake_preciser(received_dictionary["Seasons1"]), data_preciser(received_dictionary,creation_df)], ignore_index=True).drop_duplicates(subset="_id", keep="first")
+            intake_df = intake_preciser(received_dictionary["Seasons1"], received_dictionary).copy()
+            data_df = data_preciser(received_dictionary, creation_df).copy()
+
+            intake_df['_id'] = intake_df['_id'].astype(str).str.strip()
+            data_df['_id'] = data_df['_id'].astype(str).str.strip()
+            college_df = pd.concat([intake_df, data_df], ignore_index=True).drop_duplicates(subset="_id", keep="first")
         selected_fos = received_dictionary["Title"]
         selected_level = received_dictionary["Level"].lower()
 
@@ -743,11 +755,8 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         selected_fos = input_words
         received_dictionary["Title"] = selected_fos
 
-        received_dictionary["Level"] = received_dictionary["Level"].lower()
-        received_dictionary["Province"] = received_dictionary["Province"].lower()
-        received_dictionary["Seasons1"] = received_dictionary["Seasons1"].lower()
         dictionary = received_dictionary
-        dictionary = cleandict(dictionary)
+        dictionary = rearrange_dictionary(dictionary)
 
         selected_fos = " ".join(selected_fos)
 
@@ -1396,7 +1405,7 @@ def getUserRole(email: str = Depends(get_current_user)):
         # For any other kind of exception, it's an internal server error
         raise HTTPException(status_code=500, detail=f"Role Info Fetch Failed: {e}")
 
-def intake_preciser(IntakeRequest):
+def intake_preciser(IntakeRequest, dict_for_precise):
     # Assuming 'documents' is a list of dictionaries directly fetched from the database
     # Fetch the entire collection data once, leveraging caching
     documents = fetch_all_data("test", "courses")
@@ -1406,21 +1415,63 @@ def intake_preciser(IntakeRequest):
     
     # Ensure the '_id' field is converted to string format, this will apply the operation across the entire DataFrame
     df['_id'] = df['_id'].astype(str)
+
+    # Create a copy of the original 'Intake' column before exploding
+    df['OriginalIntake'] = df['Intake']
     
     # Expand the 'Intake' dictionaries into separate DataFrame rows, preserving the association with the parent document
     # This creates a new row for each item in each document's 'Intake' list, effectively normalizing the nested structure
     intake_df = df.explode('Intake').reset_index(drop=True)
 
-    # Filter out rows where 'Intake' is None or does not contain the expected keys ('season', 'status', 'deadline')
-    # This step also filters based on the 'season' matching the 'IntakeRequest'
-    filtered_df = intake_df[
-        intake_df['Intake'].apply(lambda x: isinstance(x, dict) and x.get('season') == IntakeRequest if x else False)
-    ]
+    # Ensure each 'Intake' entry is a dictionary before further processing
+    intake_df = intake_df[intake_df['Intake'].apply(lambda x: isinstance(x, dict) if x else False)]
 
+    # Filter out rows where 'Intake' is None or does not contain the expected keys ('season', 'status', 'deadline')
+    # This step also filters based on the 'season' matching in the 'IntakeRequest'
+    filtered_df = intake_df[intake_df['Intake'].apply(lambda x: x.get('season') in IntakeRequest if x else False)]
     # If necessary, further processing can be done here to structure the data as needed
-    filtered_df['Seasons1'] = IntakeRequest
-    filtered_df['Intake'] = filtered_df['Intake'].apply(lambda x: x if isinstance(x, list) else [x])
-    return filtered_df
+    filtered_df['Seasons1'] = ', '.join(IntakeRequest)
+
+
+    # Restore the original 'Intake' data
+    filtered_df['Intake'] = filtered_df['_id'].map(df.set_index('_id')['OriginalIntake'])
+
+    preciser_final_df = filtered_df.drop_duplicates('_id')
+
+    final_df_intake = data_preciser(dict_for_precise, preciser_final_df)
+
+    final_df = pd.concat([final_df_intake, preciser_final_df], ignore_index=True).drop_duplicates(subset="_id", keep="first")
+    # filtered_df['Intake'] = filtered_df['Intake'].apply(lambda x: x if isinstance(x, list) else [x]) 
+
+    return final_df
+
+def rearrange_dictionary(received_dictionary):
+    # Convert relevant fields to lowercase
+    received_dictionary["Level"] = received_dictionary["Level"].lower()
+    received_dictionary["Province"] = received_dictionary["Province"].lower()
+    received_dictionary["Seasons1"] = ', '.join(received_dictionary["Seasons1"]).lower()
+
+    # Initialize a new dictionary that will store the ordered entries
+    ordered_dictionary = {}
+
+    # Iterate through the original dictionary items
+    for key, value in received_dictionary.items():
+        # Add the current item to the ordered dictionary
+        ordered_dictionary[key] = value
+
+        # If the current key is 'Level', add 'Level1' right after
+        if key == 'Level':
+            ordered_dictionary['Level1'] = value  # Level1 has the same content as Level
+
+        # Similarly, add 'Province1' right after 'Province'
+        if key == 'Province':
+            ordered_dictionary['Province1'] = value  # Province1 has the same content as Province
+
+    # Now, ensure that any cleaning function is applied after setting the order
+    # Assuming cleandict is a function you have defined to clean/modify the dictionary further
+    ordered_dictionary = cleandict(ordered_dictionary)
+
+    return ordered_dictionary
 
 if __name__ == "__main__":
     import uvicorn
