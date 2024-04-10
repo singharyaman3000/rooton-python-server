@@ -181,8 +181,19 @@ def perform_database_operation(database, collection_name, operation_type, query=
             )
         # Silently remove email from update_data if present to prevent email changes
         update_data.pop("email", None)
-        # Prepare update operations
+
+        update_profile_filled = (
+            len(update_data.get("educationalExperiences", [])) >= 1 and
+            len(update_data.get("englishCredentialInfo", [])) >= 1 and
+            len(update_data.get("workExperiences", [])) >= 1
+        )
+
+        # Update profileFilled based on conditions
         update_operations = {}
+        if update_profile_filled:
+            update_data["profileFilled"] = True
+
+        # Prepare update operations
         if "unset" in update_data:
             update_operations["$unset"] = update_data["unset"]
             del update_data["unset"]
@@ -1299,36 +1310,39 @@ def visa_pr_prob(request: VisaPRRequest, email: str = Depends(get_current_user))
             stringUser = str(user_data)
             stringCourse = str(request.course)
             if user_data:
-                if request.ask == "Visa":
-                    messages = [{
-                    "role": "system",
-                    "content": "Based on the provided user profile and course details, assess the chances of obtaining a Canadian Visa for the user. Consider factors such as the user's academic background, test scores, work experience, and chosen program of study. The course and user profile data are dynamic and should be evaluated in the context of current immigration policies and program requirements. ALWAYS REMEMBER you have to answer only in single word Low, Medium, Also provide reason in two lines only"
-                    },
-                    {
-                    "role": "user",
-                    "content": "Given the course details: "+stringCourse+" and my profile: "+stringUser+" , what are my chances of getting a Canadian Visa?"
-                            }]
-                    result = GPTfunction(messages, text=False)
-                    request.course["Visa Chances"], request.course["Description"] = update_course_details(result)
-                    # request.course["Visa Chances"] = result
+                if user_data.get("profileFilled"):
+                    if request.ask == "Visa":
+                        messages = [{
+                        "role": "system",
+                        "content": "Based on the provided user profile and course details, assess the chances of obtaining a Canadian Visa for the user. Consider factors such as the user's academic background, test scores, work experience, and chosen program of study. The course and user profile data are dynamic and should be evaluated in the context of current immigration policies and program requirements. ALWAYS REMEMBER you have to answer only in single word Low, Medium, Also provide reason in two lines only"
+                        },
+                        {
+                        "role": "user",
+                        "content": "Given the course details: "+stringCourse+" and my profile: "+stringUser+" , what are my chances of getting a Canadian Visa?"
+                                }]
+                        result = GPTfunction(messages, text=False)
+                        request.course["Visa Chances"], request.course["Description"] = update_course_details(result)
+                        # request.course["Visa Chances"] = result
 
-                    return {"Status": "Success", "Message": request.course}
-                    
-                elif request.ask == "PR":
-                    messages = [{
-                    "role": "system",
-                    "content": "Based on the provided user profile and course details, assess the chances of obtaining a Canadian PR for the user. Consider factors such as the user's academic background, test scores, work experience, and chosen program of study. The course and user profile data are dynamic and should be evaluated in the context of current immigration policies and program requirements. ALWAYS REMEMBER you have to answer only in single word High, Medium, or Low, Also provide reason in two lines only"
-                    },
-                    {
-                    "role": "user",
-                    "content": "Given the course details: "+stringCourse+" and my profile: "+stringUser+" , what are my chances of getting a Canadian PR?"
-                            }]
-                    result = GPTfunction(messages, text=False)
-                    request.course["PR Chances"], request.course["Description"] = update_course_details(result)
-                    # request.course["PR Chances"] = result
-                    return {"Status": "Success", "Message": request.course}
+                        return {"Status": "Success", "Message": request.course}
+
+                    elif request.ask == "PR":
+                        messages = [{
+                        "role": "system",
+                        "content": "Based on the provided user profile and course details, assess the chances of obtaining a Canadian PR for the user. Consider factors such as the user's academic background, test scores, work experience, and chosen program of study. The course and user profile data are dynamic and should be evaluated in the context of current immigration policies and program requirements. ALWAYS REMEMBER you have to answer only in single word High, Medium, or Low, Also provide reason in two lines only"
+                        },
+                        {
+                        "role": "user",
+                        "content": "Given the course details: "+stringCourse+" and my profile: "+stringUser+" , what are my chances of getting a Canadian PR?"
+                                }]
+                        result = GPTfunction(messages, text=False)
+                        request.course["PR Chances"], request.course["Description"] = update_course_details(result)
+                        # request.course["PR Chances"] = result
+                        return {"Status": "Success", "Message": request.course}
+                    else:
+                        raise HTTPException(status_code=400, detail="Invalid request")
                 else:
-                    raise HTTPException(status_code=400, detail="Invalid request")
+                    raise HTTPException(status_code=400, detail="Complete your user profile first Thank You!")
             else:
                 raise HTTPException(status_code=403, detail="Complete your user profile first")
             
