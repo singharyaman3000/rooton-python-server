@@ -445,13 +445,17 @@ def GPTfunction(messages, max_tokens_count=350, text=False, usedmodel="gpt-4"):
         
 
 
-def priority1(dataframe, dictionary, selected_fos):
+def priority(dataframe, dictionary, selected_fos):
     results = []
     dictionary = {k: v for k, v in dictionary.items() if k not in ['Level', 'Province']}
     df_copy = dataframe.copy()
+    string_columns = list(dictionary.keys())
+    string_columns = [key for key in string_columns if key not in ['Fee', 'Length']]
+    # non_string_columns = [col for col in string_columns if df_copy[col].dtype != object]
+    # print("Non-string columns:", non_string_columns)
+    for column in string_columns:
+        df_copy[column] = df_copy[column].astype(str)
     for i in range(len(dictionary), 0, -1):
-        df_copy = dataframe.copy()
-
         sub_dict = dict(list(dictionary.items())[0:i])
         if len(sub_dict) > 0:
             comp_str = ""
@@ -506,67 +510,9 @@ def priority1(dataframe, dictionary, selected_fos):
     final_finalResult = pd.concat([final_result, dataframe], ignore_index=True)
 
     final_finalResult.drop_duplicates(subset="_id", keep="first", inplace=True)
-    lo_bhai = final_finalResult.filter(
-        [
-            "FieldOfStudy",
-            "Province",
-            "Institute",
-            "Length",
-            "IeltsOverall",
-            "DuolingoOverall",
-            "PteOverall",
-            "Intake",
-            "City",
-            "Campus",
-            "Title",
-            "Level",
-            "Fee",
-        ],
-        axis=1,
-    )
 
     return final_finalResult
 
-
-def priority(dataframe, dictionary, selected_fos):
-    try:
-        results = []
-        for i in range(len(dictionary), 0, -1):
-            df_copy = dataframe.copy()
-            print(f"Processing dictionary with {i} items.")  # Shows the iteration step
-
-            sub_dict = dict(list(dictionary.items())[0:i])
-            for key, value in sub_dict.items():
-                print(f"Filtering for {key} with value: {value}")  # Shows the current filtering condition
-
-                if isinstance(value, str) and ',' in value:
-                    values = [v.strip() for v in value.split(',')]
-                    print(f"Applying filter on {key} for any of {values}")  # Shows the filter condition
-                    df_copy = df_copy[df_copy[key].isin(values)]
-                elif isinstance(value, set):
-                    pattern = '|'.join([re.escape(item) for item in value])
-                    print(f"Applying regex filter on {key} for pattern: {pattern}")  # Shows the regex being used
-                    df_copy = df_copy[df_copy[key].str.contains(pattern, case=False)]
-                elif isinstance(value, (int, float)):
-                    print(f"Applying numerical filter on {key} for value <= {value}")  # Shows the numerical condition
-                    df_copy = df_copy[df_copy[key] <= value]
-                else:
-                    print(f"Applying exact string match filter on {key} for: {value}")  # Shows the string comparison
-                    df_copy = df_copy[df_copy[key].str.lower() == value.lower()]
-
-            if not df_copy.empty:
-                counts = df_copy["Title"].str.count("|".join([re.escape(fos) for fos in selected_fos]), flags=re.IGNORECASE)
-                df_copy = df_copy.assign(score=counts).sort_values('score', ascending=False).drop('score', axis=1)
-                results.append(df_copy)
-
-        final_result = pd.concat(results, ignore_index=True) if results else pd.DataFrame()
-        final_result = pd.concat([final_result, dataframe], ignore_index=True).drop_duplicates(subset="_id", keep="first")
-
-        # No need to filter columns here as we want to return the entire final_result for debugging
-        return final_result
-    except Exception as e:
-        print(f"Error processing request in priority: {e}")
-        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
 def calibre_checker(df: pd.DataFrame, language_proficiency, my_marks):
     try:
@@ -825,7 +771,7 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         if len(dictionary) == 2 or fill.empty:
             recommended_course_names = fill
         else:
-            recommended_course_names = priority1(fill, dictionary, core_selected_fos)
+            recommended_course_names = priority(fill, dictionary, core_selected_fos)
             # recommended_course_names = fill
 
         recommended_course_names.drop(
@@ -1342,7 +1288,7 @@ def visa_pr_prob(request: VisaPRRequest, email: str = Depends(get_current_user))
                     else:
                         raise HTTPException(status_code=400, detail="Invalid request")
                 else:
-                    raise HTTPException(status_code=400, detail="Complete your user profile first Thank You!")
+                    raise HTTPException(status_code=422, detail="To assess your "+request.ask+" Chances, please provide the details of Work Experience, Educational Experience, and Proficiency Tests by ")
             else:
                 raise HTTPException(status_code=403, detail="Complete your user profile first")
             
