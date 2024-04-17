@@ -65,7 +65,9 @@ class CourseRequest(BaseModel):
     email: str
     LanguageProficiency:str
     Score:float | str
-    toggle: bool
+    toggle: bool = False
+    partneredtoggle: bool = False
+    
 
 class VisaPRRequest(BaseModel):
     email: str
@@ -673,11 +675,17 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         received_dictionary.pop("Duration")
         received_dictionary.pop("Intake")
         value = fetch_all_data("test", "courses")
-        creation_df = pd.DataFrame(value)
+
+        if request.partneredtoggle:
+            creation_df = pd.DataFrame(value)
+            creation_df = creation_df[creation_df["InstituteCategory"].isin(['Direct', 'In Direct'])]
+        else:
+            creation_df = pd.DataFrame(value)
+
         if received_dictionary["Seasons1"]=="":
             college_df = data_preciser(received_dictionary,creation_df)
         else:
-            intake_df = intake_preciser(received_dictionary["Seasons1"], received_dictionary).copy()
+            intake_df = intake_preciser(received_dictionary["Seasons1"], received_dictionary,creation_df).copy()
             data_df = data_preciser(received_dictionary, creation_df).copy()
 
             intake_df['_id'] = intake_df['_id'].astype(str).str.strip()
@@ -1260,7 +1268,7 @@ def visa_pr_prob(request: VisaPRRequest, email: str = Depends(get_current_user))
                     if request.ask == "Visa":
                         messages = [{
                         "role": "system",
-                        "content": "Based on the provided user profile and course details, assess the chances of obtaining a Canadian Visa for the user. Consider factors such as the user's academic background, test scores, work experience, and chosen program of study. The course and user profile data are dynamic and should be evaluated in the context of current immigration policies and program requirements. ALWAYS REMEMBER you have to answer only in single word Low, Medium, Also provide reason in two lines only"
+                        "content": "Based on the provided applicant profile and course details, ACT & Reply as a Visa Officer & assess the chances of obtaining a Canadian Visa for the applicant. Consider factors such as the applicant's academic background, test scores, work experience, and chosen program of study. The course and user profile data are dynamic and should be evaluated in the context of current immigration policies and program requirements. ALWAYS REMEMBER you have to answer only in single word Low, Medium, or High, Also provide reason in two lines only"
                         },
                         {
                         "role": "user",
@@ -1275,7 +1283,7 @@ def visa_pr_prob(request: VisaPRRequest, email: str = Depends(get_current_user))
                     elif request.ask == "PR":
                         messages = [{
                         "role": "system",
-                        "content": "Based on the provided user profile and course details, assess the chances of obtaining a Canadian PR for the user. Consider factors such as the user's academic background, test scores, work experience, and chosen program of study. The course and user profile data are dynamic and should be evaluated in the context of current immigration policies and program requirements. ALWAYS REMEMBER you have to answer only in single word High, Medium, or Low, Also provide reason in two lines only"
+                        "content": "Based on the provided user profile and course details, assess the chances of obtaining a Canadian PR for the applicant. Consider factors such as the user's academic background, test scores, work experience, and chosen program of study. The course and user profile data are dynamic and should be evaluated in the context of current immigration policies and program requirements. ALWAYS REMEMBER you have to answer only in single word High, Medium, or Low, Also provide reason in two lines only"
                         },
                         {
                         "role": "user",
@@ -1365,13 +1373,13 @@ def getUserRole(email: str = Depends(get_current_user)):
         # For any other kind of exception, it's an internal server error
         raise HTTPException(status_code=500, detail=f"Role Info Fetch Failed: {e}")
 
-def intake_preciser(IntakeRequest, dict_for_precise):
+def intake_preciser(IntakeRequest, dict_for_precise,df):
     # Assuming 'documents' is a list of dictionaries directly fetched from the database
     # Fetch the entire collection data once, leveraging caching
-    documents = fetch_all_data("test", "courses")
+    # documents = fetch_all_data("test", "courses")
     
-    # Convert the entire dataset to a DataFrame in one go
-    df = pd.DataFrame(documents)
+    # # Convert the entire dataset to a DataFrame in one go
+    # df = pd.DataFrame(documents)
     
     # Ensure the '_id' field is converted to string format, this will apply the operation across the entire DataFrame
     df['_id'] = df['_id'].astype(str)
