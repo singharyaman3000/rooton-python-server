@@ -1,10 +1,10 @@
-from typing import Optional, List
+from typing import Optional
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
-from pydantic import BaseModel
 import pandas as pd
 import logging
+import requests
 import pymongo
 import os
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -21,7 +21,6 @@ from utilities import resetpasswordmail
 from utilities import email_verification
 import secrets
 import bcrypt
-from bson import ObjectId
 from jose import JWTError, jwt
 from fastapi import Security
 from starlette.requests import Request
@@ -33,6 +32,11 @@ from Crypto.Util.Padding import pad, unpad
 from base64 import b64decode
 from starlette.datastructures import URL
 import traceback
+import requests
+from models import *
+from utilities.emails.satbulkmail import satbulkmail
+import base64
+
 
 load_dotenv()
 
@@ -57,79 +61,7 @@ app.add_middleware(SessionMiddleware, secret_key=os.getenv("Session_SECRET_KEY")
 # Pandas ki SettingWithCopyWarning ko globally suppress karna
 pd.options.mode.chained_assignment = None  # default='warn'
 
-# Pydantic models for request and response
-class CourseRequest(BaseModel):
-    fos: str
-    level: str
-    dictionary: dict
-    email: str
-    LanguageProficiency:str
-    Score:float | str
-    toggle: bool = False
-    partneredtoggle: bool = False
-    
 
-class VisaPRRequest(BaseModel):
-    email: str
-    course: dict
-    ask: str
-
-class PromptItem(BaseModel):
-    role: str
-    content: str
-
-class SOPSOWPRequest(BaseModel):
-    prompt: List[PromptItem]
-    maxtoken: int 
-    model: str
-
-class EncryptedRequest(BaseModel):
-    encryptedData: str
-
-class CourseResponse(BaseModel):
-    data: dict
-
-
-class EmailRequest(BaseModel):
-    email: str
-    Firstname: str
-    Lastname: str
-    # EmailId: str
-    Phone: str
-    Password: str
-    Second: bool
-
-class ForgetRequest(BaseModel):
-    email: str
-
-class AuthRequest(BaseModel):
-    authId: str
-
-class ResetPasswordRequest(AuthRequest):
-    newpassword:str
-
-class LoginRequest(BaseModel):
-    email: str
-    Password: str
-
-class CustomJSONEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, ObjectId):
-            return str(obj)
-        # Let the base class default method raise the TypeError
-        return json.JSONEncoder.default(self, obj)
-    
-class ProfileInfoRequest(BaseModel):
-    email: str
-    profileInfo: dict
-
-class ProfileInfoResponse(BaseModel):
-    responsedata: dict
-
-# Define a custom response model if needed
-class ErrorResponseModel(BaseModel):
-    detail: str
-    err: str
 
 # Function to fetch all data (similar to your script)
 @cached(cache)
@@ -1440,6 +1372,20 @@ def rearrange_dictionary(received_dictionary):
     ordered_dictionary = cleandict(ordered_dictionary)
 
     return ordered_dictionary
+
+@app.post('/api/automail')
+def automail(request: AutoMailRequest):
+    try:
+        attachments = [{"filename": item.filename, "content": base64.b64decode(item.content)} for item in request.attachments]
+        if attachments:
+            attachment = attachments[0]
+            satbulkmail(request.sender, request.to, request.subject, attachment["content"], attachment["filename"])
+        else:
+            satbulkmail(request.sender, request.to, request.subject)
+    except Exception as e:
+        traceback_str = ''.join(traceback.format_tb(e.__traceback__))
+        print(f"Error processing request in Automail: {e}\nTraceback: {traceback_str}")
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
 if __name__ == "__main__":
     import uvicorn
