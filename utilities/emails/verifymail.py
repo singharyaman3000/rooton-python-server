@@ -9,10 +9,9 @@ import os
 
 load_dotenv()
 
-def email_verification(receiver_emailID, auth_id):
+def email_verification(receiver_emailID, auth_id, URLINTI):
     email_sender = os.getenv("EMAIL")
     email_password = os.getenv("EMAIL_PSK")
-    URLINTI = os.getenv("FRONTEND_URL")
     email_receiver = receiver_emailID
     subject = "Email Verification"
 

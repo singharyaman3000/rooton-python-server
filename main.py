@@ -902,52 +902,61 @@ def is_email_present(email: str) -> bool:
     return len(results) > 0
 
 @app.post("/api/send-otp")
-def send_otp(request: EmailRequest):
+def send_otp(request: EmailRequest, http_request: Request):
     try:
-        if request.Second:
-            auth_id = secrets.token_hex(40)
-            users = perform_database_operation("test", "users", "read", {"email": request.email})
-            # Check if any user is found
-            if users and len(users) > 0:
-                user_data = users[0]  # Get the first record
-                # Check if the user is verified
-                if user_data.get("verified"):
-                    return {"Status": "Verified", "Message": f"The email address '{request.email}' is already verified."}
-                else:
-                    email_verification(request.email, auth_id)
-                    perform_database_operation("test","users","update",{"email": request.email},{"authId": auth_id})
-                    return {
-                        "Status": "Success",
-                        "Message": "Email Verification Mail Resent Into Your Mailbox",
-                    }
-            else:
-                return {"Status": "Error", "Message": "User not found"}   
-        elif is_email_present(request.email):
-            return {"Status": "Present", "Message": "Email already exists"}
+        referer = http_request.headers.get("referer")
+        # Normalizing the referer by stripping the trailing slash if it exists
+        normalized_referer = referer.rstrip('/')
+        # Check if the referer is from the allowed origins
+        if referer is None or normalized_referer not in allowed_origins:
+            # Handle the case where referer is missing
+            # You can raise an HTTPException or handle it in another appropriate way
+            raise HTTPException(status_code=403, detail="Sorry, you don't have permission to access this. Please check your access rights or contact support for help")
         else:
-            auth_id = secrets.token_hex(40)
-            email_verification(request.email, auth_id)
-            hashed_password = bcrypt.hashpw(
-                request.Password.encode("utf-8"), bcrypt.gensalt(10)
-            )
-            perform_database_operation(
-                "test",
-                "users",
-                "create",
-                {
-                    "email": request.email,
-                    "Firstname": request.Firstname,
-                    "Lastname": request.Lastname,
-                    "Phone": request.Phone,
-                    "Password": hashed_password.decode("utf-8"),
-                    "verified": False,
-                    "authId": auth_id,
-                },
-            )
-            return {
-                "Status": "Success",
-                "Message": "Email Verification Mail Sent Into Your Mailbox",
-            }
+            if request.Second:
+                auth_id = secrets.token_hex(40)
+                users = perform_database_operation("test", "users", "read", {"email": request.email})
+                # Check if any user is found
+                if users and len(users) > 0:
+                    user_data = users[0]  # Get the first record
+                    # Check if the user is verified
+                    if user_data.get("verified"):
+                        return {"Status": "Verified", "Message": f"The email address '{request.email}' is already verified."}
+                    else:
+                        email_verification(request.email, auth_id, normalized_referer)
+                        perform_database_operation("test","users","update",{"email": request.email},{"authId": auth_id})
+                        return {
+                            "Status": "Success",
+                            "Message": "Email Verification Mail Resent Into Your Mailbox",
+                        }
+                else:
+                    return {"Status": "Error", "Message": "User not found"}   
+            elif is_email_present(request.email):
+                return {"Status": "Present", "Message": "Email already exists"}
+            else:
+                auth_id = secrets.token_hex(40)
+                email_verification(request.email, auth_id, normalized_referer)
+                hashed_password = bcrypt.hashpw(
+                    request.Password.encode("utf-8"), bcrypt.gensalt(10)
+                )
+                perform_database_operation(
+                    "test",
+                    "users",
+                    "create",
+                    {
+                        "email": request.email,
+                        "Firstname": request.Firstname,
+                        "Lastname": request.Lastname,
+                        "Phone": request.Phone,
+                        "Password": hashed_password.decode("utf-8"),
+                        "verified": False,
+                        "authId": auth_id,
+                    },
+                )
+                return {
+                    "Status": "Success",
+                    "Message": "Email Verification Mail Sent Into Your Mailbox",
+                }
     except Exception as e:
         print(f"Error processing request: {e}")
         raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
