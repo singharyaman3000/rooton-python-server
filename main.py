@@ -232,12 +232,14 @@ async def login_google(request: Request):
     # Check if the referer is from the allowed origins
     if normalized_referer not in allowed_origins:
         raise HTTPException(status_code=403, detail="Sorry, you don't have permission to access this. Please check your access rights or contact support for help")
-    global FRONTEND_URL
-    FRONTEND_URL = normalized_referer
-    print("FRONTEND", FRONTEND_URL)
+    
     # Store the FRONTEND_URL in the session
-    request.session['frontend_url'] = FRONTEND_URL
-    print(request.session['frontend_url'])
+    request.session['frontend_url'] = normalized_referer
+    # global FRONTEND_URL
+    # FRONTEND_URL = normalized_referer
+    # # Store the FRONTEND_URL in the session
+    # request.session['frontend_url'] = FRONTEND_URL
+
     # Obtain the redirect URI as a URL object
     redirect_uri: URL = request.url_for('authorize_google')
     
@@ -280,7 +282,6 @@ async def authorize_google(request: Request):
                 refresh_token = create_refresh_token(data=refresh_token_data)
                 return_token = create_access_token(data={"access_token": access_token,"refresh_token": refresh_token, "token_type": "bearer"}, expires_delta=response_token_expires)
                 # Create a query string with the token data
-                print("google",FRONTEND_URL, "abb session", frontend_url)
                 return RedirectResponse(url=frontend_url + "/googleauth?token=" + return_token)
             else:
                 perform_database_operation(
@@ -361,7 +362,7 @@ def process_budget(budget_str):
     return lower_limit, upper_limit
 
 
-def GPTfunction(messages, max_tokens_count=350, text=False, usedmodel="gpt-4"):
+def GPTfunction(messages, max_tokens_count=350, text=False, usedmodel="gpt-4o"):
     try:
         openai.api_key = os.getenv("OPEN_AI_KEY")
         if text:
@@ -1116,21 +1117,30 @@ def profile_info(request: ProfileInfoRequest, email: str = Depends(get_current_u
         raise HTTPException(status_code=500, detail="Couldn't load profile info. Please refresh and try again.")
 
 @app.post("/api/fogot-password")
-def forgot_password(request: ForgetRequest):
+def forgot_password(request: ForgetRequest, http_request: Request):
     try:
-        if is_email_present(request.email):
-            auth_id = secrets.token_hex(40)
-            resetpasswordmail(request.email, auth_id)
-            perform_database_operation("test","users","update",{"email": request.email},{"authId": auth_id})
-            return {
-                "Status": "Success",
-                "Message": "Reset Password Mail Sent Into Your Mailbox",
-            }
+        referer = http_request.headers.get("referer")
+        # Normalizing the referer by stripping the trailing slash if it exists
+        normalized_referer = referer.rstrip('/')
+        # Check if the referer is from the allowed origins
+        if referer is None or normalized_referer not in allowed_origins:
+            # Handle the case where referer is missing
+            # You can raise an HTTPException or handle it in another appropriate way
+            raise HTTPException(status_code=403, detail="Sorry, you don't have permission to access this. Please check your access rights or contact support for help")
         else:
-            return {
-                "Status": "Error", 
-                "Message": "Account not found. Please verify the information provided and try again, or create a new account if you don't have one."
-            }   
+            if is_email_present(request.email):
+                auth_id = secrets.token_hex(40)
+                resetpasswordmail(request.email, auth_id, normalized_referer)
+                perform_database_operation("test","users","update",{"email": request.email},{"authId": auth_id})
+                return {
+                    "Status": "Success",
+                    "Message": "Reset Password Mail Sent Into Your Mailbox",
+                }
+            else:
+                return {
+                    "Status": "Error", 
+                    "Message": "Account not found. Please verify the information provided and try again, or create a new account if you don't have one."
+                }   
     except Exception as e:
         print(f"Error processing request: {e}")
         raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
