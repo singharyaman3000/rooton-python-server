@@ -232,7 +232,12 @@ async def login_google(request: Request):
     # Check if the referer is from the allowed origins
     if normalized_referer not in allowed_origins:
         raise HTTPException(status_code=403, detail="Sorry, you don't have permission to access this. Please check your access rights or contact support for help")
-    
+    global FRONTEND_URL
+    FRONTEND_URL = normalized_referer
+    print("FRONTEND", FRONTEND_URL)
+    # Store the FRONTEND_URL in the session
+    request.session['frontend_url'] = FRONTEND_URL
+    print(request.session['frontend_url'])
     # Obtain the redirect URI as a URL object
     redirect_uri: URL = request.url_for('authorize_google')
     
@@ -248,6 +253,9 @@ async def login_google(request: Request):
 @app.get('/api/authorize/google')
 async def authorize_google(request: Request):
     try:
+        frontend_url = request.session.get('frontend_url')
+        if not frontend_url:
+            frontend_url = FRONTEND_URL
         # Authlib checks the state parameter against the session automatically
         token = await oauth.google.authorize_access_token(request)
         # If we get here, the state check has passed
@@ -272,7 +280,8 @@ async def authorize_google(request: Request):
                 refresh_token = create_refresh_token(data=refresh_token_data)
                 return_token = create_access_token(data={"access_token": access_token,"refresh_token": refresh_token, "token_type": "bearer"}, expires_delta=response_token_expires)
                 # Create a query string with the token data
-                return RedirectResponse(url=FRONTEND_URL + "/googleauth?token=" + return_token)
+                print("google",FRONTEND_URL, "abb session", frontend_url)
+                return RedirectResponse(url=frontend_url + "/googleauth?token=" + return_token)
             else:
                 perform_database_operation(
                     "test",
@@ -313,7 +322,7 @@ async def authorize_google(request: Request):
                 response_token_expires = timedelta(minutes=1)
                 return_token = create_access_token(data={"access_token": access_token,"refresh_token": refresh_token, "token_type": "bearer"}, expires_delta=response_token_expires)
                 # Create a query string with the token data
-                return RedirectResponse(url=FRONTEND_URL + "/googleauth?token=" + return_token)
+                return RedirectResponse(url=frontend_url + "/googleauth?token=" + return_token)
         else:
             raise HTTPException(status_code=401, detail="Your login details didn't match our records. Please check and try again.")
 
