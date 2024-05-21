@@ -26,7 +26,7 @@ from fastapi import Security
 from starlette.requests import Request
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse, RedirectResponse
+from starlette.responses import JSONResponse, RedirectResponse, Response
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
@@ -47,7 +47,7 @@ app = FastAPI()
 
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 FRONTEND_URL = os.getenv("FRONTEND_URL")
-additional_origin = os.getenv("ADDITIONAL_ORIGIN")
+additional_origin = os.getenv("ADDITIONAL_ORIGIN", "https://onlineservices-servicesenligne.cic.gc.ca")
 
 # Configure CORS
 app.add_middleware(
@@ -65,13 +65,25 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 class CustomCORSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        if request.url.path == "/api/automail" and request.headers.get("origin") == additional_origin:
-            response = await call_next(request)
-            response.headers["Access-Control-Allow-Origin"] = additional_origin
-            response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-            response.headers["Access-Control-Allow-Headers"] = "*"
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-            return response
+        if request.url.path == "/api/automail":
+            origin = request.headers.get("origin")
+            if origin == additional_origin:
+                if request.method == "OPTIONS":
+                    response = JSONResponse()
+                    response.headers["Access-Control-Allow-Origin"] = additional_origin
+                    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+                    response.headers["Access-Control-Allow-Headers"] = "*"
+                    response.headers["Access-Control-Allow-Credentials"] = "true"
+                    return response
+                else:
+                    response = await call_next(request)
+                    response.headers["Access-Control-Allow-Origin"] = additional_origin
+                    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+                    response.headers["Access-Control-Allow-Headers"] = "*"
+                    response.headers["Access-Control-Allow-Credentials"] = "true"
+                    return response
+            else:
+                return Response("Forbidden", status_code=403)
         return await call_next(request)
 
 app.add_middleware(CustomCORSMiddleware)
