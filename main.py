@@ -25,6 +25,7 @@ from jose import JWTError, jwt
 from fastapi import Security
 from starlette.requests import Request
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, RedirectResponse
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from Crypto.Cipher import AES
@@ -46,6 +47,7 @@ app = FastAPI()
 
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 FRONTEND_URL = os.getenv("FRONTEND_URL")
+additional_origin = os.getenv("ADDITIONAL_ORIGIN")
 
 # Configure CORS
 app.add_middleware(
@@ -61,6 +63,18 @@ app.add_middleware(SessionMiddleware, secret_key=os.getenv("Session_SECRET_KEY")
 # Pandas ki SettingWithCopyWarning ko globally suppress karna
 pd.options.mode.chained_assignment = None  # default='warn'
 
+class CustomCORSMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path == "/api/automail" and request.headers.get("origin") == additional_origin:
+            response = await call_next(request)
+            response.headers["Access-Control-Allow-Origin"] = additional_origin
+            response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "*"
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            return response
+        return await call_next(request)
+
+app.add_middleware(CustomCORSMiddleware)
 
 
 # Function to fetch all data (similar to your script)
