@@ -78,7 +78,7 @@ class CustomCORSMiddleware(BaseHTTPMiddleware):
                 else:
                     response = await call_next(request)
                     response.headers["Access-Control-Allow-Origin"] = additional_origin
-                    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+                    response.headers["Access-Control-Allow-Methods"] = "*"
                     response.headers["Access-Control-Allow-Headers"] = "*"
                     response.headers["Access-Control-Allow-Credentials"] = "true"
                     return response
@@ -1434,8 +1434,10 @@ def automail(request: AutoMailRequest):
         if attachments:
             attachment = attachments[0]
             satbulkmail(request.sender, request.to, request.subject, attachment["content"], attachment["filename"])
+            return {"status": "success with attachment"}
         else:
             satbulkmail(request.sender, request.to, request.subject)
+            return {"status": "success without attachment"}
     except Exception as e:
         traceback_str = ''.join(traceback.format_tb(e.__traceback__))
         print(f"Error processing request in Automail: {e}\nTraceback: {traceback_str}")
