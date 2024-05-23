@@ -87,7 +87,7 @@ class PhonePeRequest(BaseModel):
 
 class MailAttachment(BaseModel):
     filename: str
-    content: str
+    drive_link: str
 
 class AutoMailRequest(BaseModel):
     sender: str
