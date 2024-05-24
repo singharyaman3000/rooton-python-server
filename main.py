@@ -63,32 +63,6 @@ app.add_middleware(SessionMiddleware, secret_key=os.getenv("Session_SECRET_KEY")
 # Pandas ki SettingWithCopyWarning ko globally suppress karna
 pd.options.mode.chained_assignment = None  # default='warn'
 
-class CustomCORSMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        if request.url.path == "/api/automail":
-            origin = request.headers.get("origin")
-            if origin == additional_origin:
-                if request.method == "OPTIONS":
-                    response = JSONResponse()
-                    response.headers["Access-Control-Allow-Origin"] = additional_origin
-                    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-                    response.headers["Access-Control-Allow-Headers"] = "*"
-                    response.headers["Access-Control-Allow-Credentials"] = "true"
-                    return response
-                else:
-                    response = await call_next(request)
-                    response.headers["Access-Control-Allow-Origin"] = additional_origin
-                    response.headers["Access-Control-Allow-Methods"] = "*"
-                    response.headers["Access-Control-Allow-Headers"] = "*"
-                    response.headers["Access-Control-Allow-Credentials"] = "true"
-                    return response
-            else:
-                return Response("Forbidden", status_code=403)
-        return await call_next(request)
-
-app.add_middleware(CustomCORSMiddleware)
-
-
 # Function to fetch all data (similar to your script)
 @cached(cache)
 def fetch_all_data(database, collection):
@@ -1433,10 +1407,10 @@ def automail(request: AutoMailRequest):
         attachments = [{"filename": item.filename, "content": base64.b64decode(item.content)} for item in request.attachments]
         if attachments:
             attachment = attachments[0]
-            satbulkmail(request.sender, request.to, request.subject, attachment["content"], attachment["filename"])
+            satbulkmail(request.sender, request.to, request.subject, attachment["content"], attachment["filename"], request.cc)
             return {"status": "success with attachment"}
         else:
-            satbulkmail(request.sender, request.to, request.subject)
+            satbulkmail(request.sender, request.to, request.subject, cc_addresses=request.cc)
             return {"status": "success without attachment"}
     except Exception as e:
         traceback_str = ''.join(traceback.format_tb(e.__traceback__))

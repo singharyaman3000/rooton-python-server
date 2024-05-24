@@ -9,7 +9,7 @@ import os
 
 load_dotenv()
 
-def satbulkmail(sender_emailID: str, receiver_emailID: str, mail_subject: str, pdf_blob: bytes = None, pdf_filename: str = None):
+def satbulkmail(sender_emailID: str, receiver_emailID: str, mail_subject: str, pdf_blob: bytes = None, pdf_filename: str = None, cc_addresses: list = None):
     email_receiver = receiver_emailID
     email_sender = sender_emailID
     PSK = sender_emailID.split("@", 1)
@@ -70,6 +70,8 @@ https://linktr.ee/rooton
     msgRoot["Subject"] = subject
     msgRoot["From"] = email_sender
     msgRoot["To"] = email_receiver
+    if cc_addresses:
+        msgRoot["Cc"] = ', '.join(cc_addresses)
 
     # Create the alternative part
     msgAlternative = MIMEMultipart("alternative")
@@ -91,4 +93,4 @@ https://linktr.ee/rooton
     # Send the email
     with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as smtp:
         smtp.login(email_sender, email_password)
-        smtp.sendmail(email_sender, email_receiver, msgRoot.as_string())
+        smtp.sendmail(email_sender, [email_receiver] + (cc_addresses if cc_addresses else []), msgRoot.as_string())
