@@ -1404,7 +1404,7 @@ def rearrange_dictionary(received_dictionary):
 @app.post('/api/automail')
 def automail(request: AutoMailRequest):
     try:
-        attachments = [{"filename": item.filename, "content": item.content} for item in request.attachments]
+        attachments = [{"filename": item.filename, "content": base64.b64decode(item.content)} for item in request.attachments]
         if attachments:
             attachment = attachments[0]
             satbulkmail(request.sender, request.to, request.subject, attachment["content"], attachment["filename"], request.cc)
