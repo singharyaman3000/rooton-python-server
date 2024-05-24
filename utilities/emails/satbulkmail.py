@@ -81,11 +81,11 @@ https://linktr.ee/rooton
     msgAlternative.attach(MIMEText(plain_body, "plain"))
     msgAlternative.attach(MIMEText(html_body, "html"))
 
-    # # Conditionally attach the PDF if provided
-    # if pdf_blob is not None and pdf_filename is not None:
-    #     pdf_attachment = MIMEApplication(pdf_blob, _subtype="pdf")
-    #     pdf_attachment.add_header('Content-Disposition', 'attachment', filename=pdf_filename)
-    #     msgRoot.attach(pdf_attachment)
+    # Conditionally attach the PDF if provided
+    if pdf_blob is not None and pdf_filename is not None:
+        pdf_attachment = MIMEApplication(pdf_blob, _subtype="pdf")
+        pdf_attachment.add_header('Content-Disposition', 'attachment', filename=pdf_filename)
+        msgRoot.attach(pdf_attachment)
 
     # Create a secure SSL context
     context = ssl.create_default_context()
