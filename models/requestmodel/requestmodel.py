@@ -92,5 +92,6 @@ class MailAttachment(BaseModel):
 class AutoMailRequest(BaseModel):
     sender: str
     to: str
+    cc:list = None
     subject: str
     attachments: List[MailAttachment]

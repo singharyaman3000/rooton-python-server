@@ -9,7 +9,7 @@ import os
 
 load_dotenv()
 
-def satbulkmail(sender_emailID: str, receiver_emailID: str, mail_subject: str, attachment_link: str = None, pdf_filename: str = None):
+def satbulkmail(sender_emailID: str, receiver_emailID: str, mail_subject: str, pdf_blob: bytes = None, pdf_filename: str = None, cc_addresses: list = None):
     email_receiver = receiver_emailID
     email_sender = sender_emailID
     PSK = sender_emailID.split("@", 1)
@@ -21,8 +21,7 @@ def satbulkmail(sender_emailID: str, receiver_emailID: str, mail_subject: str, a
     plain_body = """
 Dear Aspirants,
 
-As your authorized representative for your visa application, we would like to inform you of the latest updates on your visa application status. Below you will find the PDF of your visa status to give a better understanding or You can view your latest application update by clicking the link below:
-{0}. 
+As your authorized representative for your visa application, we would like to inform you of the latest updates on your visa application status. Below you will find the PDF of your visa status to give a better understanding. 
 
 If in case we receive any change in the current status of your application, we will notify you personally. There will be a weekly email update every Saturday from Root On Immigration Consultants for the status of your application. 
 
@@ -38,7 +37,7 @@ RCIC, ICCRC Council Member Firm (R529956)
 https://iccrc-crcic.ca/find-a-professional/
 Root On Immigration Consultants Inc.
 https://linktr.ee/rooton
-""".format(attachment_link)
+"""
 
     # HTML body
     html_body = """
@@ -49,8 +48,7 @@ https://linktr.ee/rooton
 </head>
 <body style="font-family: Serif; font-size: 12pt;">
     <p>Dear Aspirants,</p>
-    <p>As your authorized representative for your visa application, we would like to inform you of the latest updates on your visa application status. Below you will find the PDF of your visa status to give a better understanding or You can view your latest application update by clicking the link below:<br>
-    <a href="{1}">Click here to view your latest application update</a></p>
+    <p>As your authorized representative for your visa application, we would like to inform you of the latest updates on your visa application status. Below you will find the PDF of your visa status to give a better understanding.</p>
     <p>If in case we receive any change in the current status of your application, we will notify you personally. There will be a weekly email update every Saturday from Root On Immigration Consultants for the status of your application.</p>
     <p>Thank you for your cooperation in advance. However, there might be a delay from IRCC due to the high volume of applications, in that case, please do not panic as it will be the same for others too.</p>
     <p>Please feel free to email us if you have any further questions or concerns.</p>
@@ -65,13 +63,15 @@ https://linktr.ee/rooton
     <p style="font-size:12px;line-height:1px;margin:16px 0;color:#b7b7b7;text-align:left;margin-bottom:50px"><br />{0}</p>
 </body>
 </html>
-""".format(datetime.now(), attachment_link)
+""".format(datetime.now())
 
     # Create the root message
     msgRoot = MIMEMultipart("related")
     msgRoot["Subject"] = subject
     msgRoot["From"] = email_sender
     msgRoot["To"] = email_receiver
+    if cc_addresses:
+        msgRoot["Cc"] = ', '.join(cc_addresses)
 
     # Create the alternative part
     msgAlternative = MIMEMultipart("alternative")
@@ -93,4 +93,4 @@ https://linktr.ee/rooton
     # Send the email
     with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as smtp:
         smtp.login(email_sender, email_password)
-        smtp.sendmail(email_sender, email_receiver, msgRoot.as_string())
+        smtp.sendmail(email_sender, [email_receiver] + (cc_addresses if cc_addresses else []), msgRoot.as_string())
