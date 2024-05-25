@@ -1407,10 +1407,10 @@ def automail(request: AutoMailRequest):
         attachments = [{"filename": item.filename, "content": base64.b64decode(item.content)} for item in request.attachments]
         if attachments:
             attachment = attachments[0]
-            satbulkmail(request.sender, request.to, request.subject, attachment["content"], attachment["filename"], request.cc)
+            satbulkmail(request.sender, request.to, request.subject, attachment["content"], attachment["filename"], request.cc, request.name)
             return {"status": "success with attachment"}
         else:
-            satbulkmail(request.sender, request.to, request.subject, cc_addresses=request.cc)
+            satbulkmail(request.sender, request.to, request.subject, cc_addresses=request.cc, client_name = request.name)
             return {"status": "success without attachment"}
     except Exception as e:
         traceback_str = ''.join(traceback.format_tb(e.__traceback__))

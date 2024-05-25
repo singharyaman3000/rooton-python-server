@@ -9,7 +9,7 @@ import os
 
 load_dotenv()
 
-def satbulkmail(sender_emailID: str, receiver_emailID: str, mail_subject: str, pdf_blob: bytes = None, pdf_filename: str = None, cc_addresses: list = None):
+def satbulkmail(sender_emailID: str, receiver_emailID: str, mail_subject: str, pdf_blob: bytes = None, pdf_filename: str = None, cc_addresses: list = None, client_name: str = "Aspirants"):
     email_receiver = receiver_emailID
     email_sender = sender_emailID
     PSK = sender_emailID.split("@", 1)
@@ -19,51 +19,84 @@ def satbulkmail(sender_emailID: str, receiver_emailID: str, mail_subject: str, p
 
     # Plain text body
     plain_body = """
-Dear Aspirants,
+Dear {0},
 
-As your authorized representative for your visa application, we would like to inform you of the latest updates on your visa application status. Below you will find the PDF of your visa status to give a better understanding. 
+As your authorized representative for your visa application, I am writing to update you on your current visa status. Please review the attached PDF for details.
 
-If in case we receive any change in the current status of your application, we will notify you personally. There will be a weekly email update every Saturday from Root On Immigration Consultants for the status of your application. 
+We will notify you directly of any changes to your application status. Additionally, weekly updates will be provided every Saturday by Root On Immigration Consultants.
 
-Thank you for your cooperation in advance. However, there might be a delay from IRCC due to the high volume of applications, in that case, please do not panic as it will be the same for others too.
+Thank you for your cooperation. Please be aware that processing times can vary due to high volumes at IRCC, and we encourage you to regularly check their website for the latest updates: IRCC Processing Times.
 
-Please feel free to email us if you have any further questions or concerns.
+Should you have any further questions or concerns, please do not hesitate to email us.
 
 Regards,
 Team Root On
-Team Leader
 
 RCIC, ICCRC Council Member Firm (R529956)
 https://iccrc-crcic.ca/find-a-professional/
 Root On Immigration Consultants Inc.
 https://linktr.ee/rooton
-"""
+""".format(client_name)
 
-    # HTML body
     html_body = """
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html lang="en">
 <head>
     <meta http-equiv="Content-Type" content="text/html charset=UTF-8" />
 </head>
-<body style="font-family: Serif; font-size: 12pt;">
-    <p>Dear Aspirants,</p>
-    <p>As your authorized representative for your visa application, we would like to inform you of the latest updates on your visa application status. Below you will find the PDF of your visa status to give a better understanding.</p>
-    <p>If in case we receive any change in the current status of your application, we will notify you personally. There will be a weekly email update every Saturday from Root On Immigration Consultants for the status of your application.</p>
-    <p>Thank you for your cooperation in advance. However, there might be a delay from IRCC due to the high volume of applications, in that case, please do not panic as it will be the same for others too.</p>
-    <p>Please feel free to email us if you have any further questions or concerns.</p>
-    <p>Regards,<br>
-    Team Root On<br>
-
-    <img src="https://i.postimg.cc/wMn5hJ9g/rooton.png" alt="Rooton" height="50" />
-    <p>RCIC, ICCRC Council Member Firm (R529956)<br>
-    <a href="https://iccrc-crcic.ca/find-a-professional/">https://iccrc-crcic.ca/find-a-professional/</a><br>
-    Root On Immigration Consultants Inc.<br>
-    <a href="https://linktr.ee/rooton">https://linktr.ee/rooton</a></p>
-    <p style="font-size:12px;line-height:1px;margin:16px 0;color:#b7b7b7;text-align:left;margin-bottom:50px"><br />{0}</p>
+<body style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;">
+    <div id="__react-email-preview" style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0">Latest updates on your visa application status.<div></div></div>
+    <table style="width:100%;background-color:#ffffff;margin:0 auto;" align="center" border="0" cellpadding="0" cellspacing="0" role="presentation">
+        <tbody>
+            <tr>
+                <td>
+                    <div style="max-width:600px;margin:0 auto">
+                        <table style="width:100%;margin-top:32px" align="center" border="0" cellpadding="0" cellspacing="0" role="presentation">
+                            <tbody>
+                                <tr>
+                                    <td><img alt="Rooton" src="https://i.postimg.cc/wMn5hJ9g/rooton.png" width="auto" height="50" style="display:block;outline:none;border:none;text-decoration:none" /></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <h1 style="color:#1d1c1d;font-size:36px;font-weight:700;margin:30px 0;padding:0;line-height:42px">Latest Visa Application Status</h1>
+                        <p style="font-size:20px;line-height:28px;margin:16px 0;margin-bottom:30px">Dear {1},</p>
+                        <p style="font-size:20px;line-height:28px;margin:16px 0;margin-bottom:30px">As your authorized representative for your visa application, I am writing to update you on your current visa status. Please review the attached PDF for details.</p>
+                        <p style="font-size:20px;line-height:28px;margin:16px 0;margin-bottom:30px">We will notify you directly of any changes to your application status. Additionally, weekly updates will be provided every Saturday by Root On Immigration Consultants.</p>
+                        <p style="font-size:20px;line-height:28px;margin:16px 0;margin-bottom:30px">Thank you for your cooperation. Please be aware that processing times can vary due to high volumes at IRCC, and we encourage you to regularly check their website for the latest updates: <a href="https://www.canada.ca/en/immigration-refugees-citizenship/services/application/check-processing-times.html">IRCC Processing Times.</a></p>
+                        <p style="font-size:20px;line-height:28px;margin:16px 0;margin-bottom:30px">Should you have any further questions or concerns, please do not hesitate to email us.</p>
+                        <p style="font-size:20px;line-height:28px;margin:16px 0;margin-bottom:30px">Regards,<br>Team Root On</p>
+                        <table style="margin-bottom:32px;width:100%" border="0" cellpadding="0" cellspacing="10" align="left">
+                          <tr>
+                            <td align="left" valign="top"><img alt="Rooton" src="https://i.postimg.cc/wMn5hJ9g/rooton.png" width="auto" height="50" style="display:block;outline:none;border:none;text-decoration:none" /></td>
+                            <td align="right" valign="top">
+                                <a target="_blank" style="color:#067df7;text-decoration:none" href="https://www.facebook.com/pg/rooton/">
+                                    <img alt="Facebook" src="https://cdn-icons-png.flaticon.com/512/739/739237.png" width="32" height="32" style="display:inline;outline:none;border:none;text-decoration:none;margin-left:32px" />
+                                </a>
+                                <a target="_blank" style="color:#067df7;text-decoration:none" href="https://instagram.com/rootonofficial">
+                                    <img alt="Instagram" src="https://cdn-icons-png.flaticon.com/512/87/87390.png" width="32" height="32" style="display:inline;outline:none;border:none;text-decoration:none;margin-left:32px" />
+                                </a>
+                                <a target="_blank" style="color:#067df7;text-decoration:none" href="https://www.linkedin.com/in/ronak-patel-rcic/">
+                                    <img alt="LinkedIn" src="https://cdn-icons-png.flaticon.com/512/220/220343.png" width="32" height="32" style="display:inline;outline:none;border:none;text-decoration:none;margin-left:32px" />
+                                </a>
+                            </td>
+                          </tr>
+                        <p style="font-size:14px;line-height:24px;margin:16px 0;color:#000">RCIC, ICCRC Council Member Firm (R529956)<br>
+                        <a href="https://iccrc-crcic.ca/find-a-professional/" style="color:#067df7;text-decoration:none" target="_blank">https://iccrc-crcic.ca/find-a-professional/</a><br>
+                        Root On Immigration Consultants Inc.<br>
+                        <a href="https://linktr.ee/rooton" style="color:#067df7;text-decoration:none" target="_blank">https://linktr.ee/rooton</a></p>
+                        
+                        </table>
+                        <p style="font-size:12px;line-height:1px;margin:16px 0;color:#b7b7b7;text-align:left;margin-bottom:50px">
+                            {0}
+                        </p>
+                    </div>
+                </td>
+            </tr>
+        </tbody>
+    </table>
 </body>
 </html>
-""".format(datetime.now())
+""".format(datetime.now(), client_name)
 
     # Create the root message
     msgRoot = MIMEMultipart("related")
