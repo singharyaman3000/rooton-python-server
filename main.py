@@ -36,6 +36,9 @@ import traceback
 import requests
 from models import *
 from utilities.emails.satbulkmail import satbulkmail
+from utilities.apithird.docusealapi import get_docuseal_templates_fn
+from utilities.helperfunc.dbfunc import perform_database_operation
+from utilities.helperfunc.slugfinder import get_slug_value
 import base64
 
 
@@ -84,97 +87,6 @@ def fetch_all_data(database, collection):
         client.close()
 
     return results
-
-def fetch_collection(database, collection):
-    MONGODB_URI = os.getenv("MONGODB_URI")
-    client = pymongo.MongoClient(MONGODB_URI)
-
-    db = client[database]
-    collection = db[collection]
-
-    return collection
-
-
-def perform_database_operation(database, collection_name, operation_type, query=None, update_data=None):
-    MONGODB_URI = os.getenv("MONGODB_URI")
-    client = pymongo.MongoClient(MONGODB_URI)
-
-    db = client[database]
-    collection = db[collection_name]
-
-    if operation_type == "read":
-        cursor = collection.find(query)
-        documents = list(cursor)
-        client.close()
-        return documents
-
-    elif operation_type == "update":
-        if query is None or update_data is None:
-            raise ValueError(
-                "Both query and update_data must be provided for update operation."
-            )
-        # Silently remove email from update_data if present to prevent email changes
-        update_data.pop("email", None)
-
-        update_profile_filled = (
-            len(update_data.get("educationalExperiences", [])) >= 1 and
-            len(update_data.get("englishCredentialInfo", [])) >= 1 and
-            len(update_data.get("workExperiences", [])) >= 1
-        )
-
-        # Update profileFilled based on conditions
-        update_operations = {}
-        if update_profile_filled:
-            update_data["profileFilled"] = True
-
-        # Prepare update operations
-        if "unset" in update_data:
-            update_operations["$unset"] = update_data["unset"]
-            del update_data["unset"]
-
-        if update_data:  # Check if there's anything left to set
-            update_operations["$set"] = update_data
-
-        result = collection.update_one(query, update_operations)
-        client.close()
-        return result.modified_count
-
-    elif operation_type == "create":
-        if query is None:
-            raise ValueError("query must be provided for create operation.")
-        # Ensure email uniqueness at the collection level
-        collection.create_index([("email", pymongo.ASCENDING)], unique=True)
-        # List of allowed email domains
-        allowed_domains = ["rooton.ca"]  # Add more domains as needed
-
-        # Extract the email domain
-        email = query.get("email", "")
-        domain_matched = False
-
-        for allowed_domain in allowed_domains:
-            if email.endswith("@" + allowed_domain):
-                query["Role"] = "Counselor"
-                domain_matched = True
-                break
-
-        if not domain_matched:
-            query["Role"] = "User"
-        result = collection.insert_one(query)
-        client.close()
-        return result.inserted_id  # Return the _id of the inserted document
-
-    elif operation_type == "delete":
-        if query is None:
-            raise ValueError("query must be provided for delete operation.")
-        result = collection.delete_one(query)
-        client.close()
-        return result.deleted_count  # Return the number of deleted documents
-
-    else:
-        raise ValueError(
-            "Invalid operation type. Supported types are 'read', 'update', 'create', and 'delete'."
-        )
-
 
 async def preload_cache():
     try:
@@ -1417,6 +1329,38 @@ def automail(request: AutoMailRequest):
         print(f"Error processing request in Automail: {e}\nTraceback: {traceback_str}")
         raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
+@app.post('/api/userDoc')
+def retainerfunction(request: DocuSealRequest):
+    try:
+        finder_string = request.email +'-'+ request.serveDoc
+        print(finder_string)
+        doc_response = get_docuseal_templates_fn(finder_string)
+        if isinstance(doc_response, str):
+            doc = json.loads(doc_response)
+        count = doc['pagination']['count']
+        if count == 1:
+            slug = doc['data'][0]['slug']
+        elif count > 1:
+            slug = None
+            slug = doc['data'][0]['slug']
+        else:
+            default_slug = get_slug_value(request.serveDoc)
+            if default_slug == None:
+                response = {"Error": "The default signing document is missing for your specific service. Please inform the developer at aryaman.singh@rooton.ca."}
+                raise HTTPException(status_code=404, detail=response)
+            else:
+                slug = default_slug
+        
+        return {"Status":"Found", "Slug": slug}
+    except HTTPException as http_exc:
+        # If it's an HTTPException, we just re-raise it
+        # This is assuming HTTPException is meant to be used for HTTP status-related errors
+        raise http_exc
+    except Exception as e:
+        traceback_str = ''.join(traceback.format_tb(e.__traceback__))
+        print(f"Error processing request in Docuseal: {e}\nTraceback: {traceback_str}")
+        raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
+    
 if __name__ == "__main__":
     import uvicorn
 

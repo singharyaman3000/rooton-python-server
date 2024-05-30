@@ -9,7 +9,7 @@ import os
 
 load_dotenv()
 
-def satbulkmail(sender_emailID: str, receiver_emailID: str, mail_subject: str, pdf_blob: bytes = None, pdf_filename: str = None, cc_addresses: list = None, client_name: str = "Aspirants"):
+def satbulkmail(sender_emailID: str, receiver_emailID: str, mail_subject: str, pdf_blob: bytes = None, pdf_filename: str = None, cc_addresses: list = None, client_name: str = "Aspirant"):
     email_receiver = receiver_emailID
     email_sender = sender_emailID
     PSK = sender_emailID.split("@", 1)

@@ -95,4 +95,8 @@ class AutoMailRequest(BaseModel):
     cc:list = None
     subject: str
     attachments: List[MailAttachment]
-    name: str = "Aspirants"
+    name: str = "Aspirant"
+
+class DocuSealRequest(BaseModel):
+    email:str
+    serveDoc: str
