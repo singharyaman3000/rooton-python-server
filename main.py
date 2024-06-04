@@ -1331,7 +1331,7 @@ def automail(request: AutoMailRequest):
         raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
 
 @app.post('/api/userDoc')
-def retainerfunction(request: DocuSealRequest):
+def retainer_function(request: DocuSealRequest):
     try:
         finder_string = request.email +'-'+ request.serveDoc
         print(finder_string)
