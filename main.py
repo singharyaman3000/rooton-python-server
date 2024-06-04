@@ -1335,9 +1335,8 @@ def retainerfunction(request: DocuSealRequest):
     try:
         finder_string = request.email +'-'+ request.serveDoc
         print(finder_string)
-        doc_response = get_docuseal_templates_fn(finder_string)
-        if isinstance(doc_response, str):
-            doc = json.loads(doc_response)
+        doc = get_docuseal_templates_fn(finder_string)
+
         count = doc['pagination']['count']
         if count == 1:
             slug = doc['data'][0]['slug']

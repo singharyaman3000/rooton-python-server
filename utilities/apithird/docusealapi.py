@@ -1,3 +1,4 @@
+import json
 import requests
 from dotenv import load_dotenv
 import os
@@ -13,4 +14,4 @@ def get_docuseal_templates_fn(client_mail: str):
 
     response = requests.get(reqUrl, data=payload,  headers=headersList)
 
-    return response.text
+    return response.json()
