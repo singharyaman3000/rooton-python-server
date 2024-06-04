@@ -15,7 +15,7 @@ def fetch_collection(database, collection):
     return collection
 
 
-def perform_database_operation(database, collection_name, operation_type, query=None, update_data=None):
+def perform_database_operation(database, collection_name, operation_type, query=None, update_data=None, signup=False):
     MONGODB_URI = os.getenv("MONGODB_URI")
     client = pymongo.MongoClient(MONGODB_URI)
 
@@ -62,26 +62,32 @@ def perform_database_operation(database, collection_name, operation_type, query=
     elif operation_type == "create":
         if query is None:
             raise ValueError("query must be provided for create operation.")
-        # Ensure email uniqueness at the collection level
-        collection.create_index([("email", pymongo.ASCENDING)], unique=True)
-        # List of allowed email domains
-        allowed_domains = ["rooton.ca"]  # Add more domains as needed
+        if signup:
+            # Ensure email uniqueness at the collection level
+            collection.create_index([("email", pymongo.ASCENDING)], unique=True)
+            # List of allowed email domains
+            allowed_domains = ["rooton.ca"]  # Add more domains as needed
 
-        # Extract the email domain
-        email = query.get("email", "")
-        domain_matched = False
+            # Extract the email domain
+            email = query.get("email", "")
+            domain_matched = False
 
-        for allowed_domain in allowed_domains:
-            if email.endswith("@" + allowed_domain):
-                query["Role"] = "Counselor"
-                domain_matched = True
-                break
+            for allowed_domain in allowed_domains:
+                if email.endswith("@" + allowed_domain):
+                    query["Role"] = "Counselor"
+                    domain_matched = True
+                    break
 
-        if not domain_matched:
-            query["Role"] = "User"
-        result = collection.insert_one(query)
-        client.close()
-        return result.inserted_id  # Return the _id of the inserted document
+            if not domain_matched:
+                query["Role"] = "User"
+            result = collection.insert_one(query)
+            client.close()
+            return result.inserted_id  # Return the _id of the inserted document
+        
+        else:
+            result = collection.insert_one(query)
+            client.close()
+            return result.inserted_id
 
     elif operation_type == "delete":
         if query is None:

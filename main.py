@@ -50,7 +50,7 @@ app = FastAPI()
 
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 FRONTEND_URL = os.getenv("FRONTEND_URL")
-additional_origin = os.getenv("ADDITIONAL_ORIGIN", "https://onlineservices-servicesenligne.cic.gc.ca")
+additional_origin = os.getenv("ADDITIONAL_ORIGIN", "")
 
 # Configure CORS
 app.add_middleware(
@@ -209,6 +209,7 @@ async def authorize_google(request: Request):
                         "verified": True,
                         # "authId": auth_id,
                     },
+                    signup=True
                 )
                 perform_database_operation(
                     "test",
@@ -221,7 +222,7 @@ async def authorize_google(request: Request):
                         "Phone": "",
                         "profileFilled": False,
                         # "authId": auth_id,
-                    },
+                    },signup=True
                 )
                 token_data = {"Email": user_data["email"], "FirstName": user_data.get("given_name", ""),
                     "LastName": user_data.get("family_name", ""), "type": "access"}
@@ -863,7 +864,7 @@ def send_otp(request: EmailRequest, http_request: Request):
                         "Password": hashed_password.decode("utf-8"),
                         "verified": False,
                         "authId": auth_id,
-                    },
+                    },signup=True
                 )
                 return {
                     "Status": "Success",
@@ -898,7 +899,7 @@ def verification(request: AuthRequest):
                         "Phone": result[0]['Phone'],
                         "profileFilled": False,
                         # "authId": auth_id,
-                    },
+                    },signup=True
                 )
             return {"Status": "Success", "Message": "Verification Successful"}
         else:
