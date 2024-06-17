@@ -1,5 +1,5 @@
 import json
-from typing import List
+from typing import List, Optional
 from bson import ObjectId
 from pydantic import BaseModel
 
@@ -98,5 +98,5 @@ class AutoMailRequest(BaseModel):
     name: str = "Aspirant"
 
 class DocuSealRequest(BaseModel):
-    email:str
+    email: Optional[str] = None
     serveDoc: str

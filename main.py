@@ -1333,17 +1333,17 @@ def automail(request: AutoMailRequest):
 @app.post('/api/userDoc')
 def retainer_function(request: DocuSealRequest):
     try:
-        finder_string = request.email +'-'+ request.serveDoc
-        print(finder_string)
-        doc = get_docuseal_templates_fn(finder_string)
+        slug = None
+        if request.email is not None:
+            finder_string = request.email +'-'+ request.serveDoc
 
-        count = doc['pagination']['count']
-        if count == 1:
-            slug = doc['data'][0]['slug']
-        elif count > 1:
-            slug = None
-            slug = doc['data'][0]['slug']
-        else:
+            doc = get_docuseal_templates_fn(finder_string)
+
+            count = doc['pagination']['count']
+            if count > 0:
+                slug = doc['data'][0]['slug']
+        
+        if slug is None:
             default_slug = get_slug_value(request.serveDoc)
             if default_slug == None:
                 response = {"Error": "The default signing document is missing for your specific service. Please inform the developer at aryaman.singh@rooton.ca."}
