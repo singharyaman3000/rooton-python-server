@@ -1334,7 +1334,7 @@ def automail(request: AutoMailRequest):
 def retainer_function(request: DocuSealRequest):
     try:
         slug = None
-        if request.email is not None:
+        if len(request.email) is not 0:
             finder_string = request.email +'-'+ request.serveDoc
 
             doc = get_docuseal_templates_fn(finder_string)
