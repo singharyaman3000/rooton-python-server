@@ -1361,6 +1361,49 @@ def retainer_function(request: DocuSealRequest):
         print(f"Error processing request in Docuseal: {e}\nTraceback: {traceback_str}")
         raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
     
+@app.put("/api/docusealCheck")
+def docuSeal(request: CheckDocRequest):
+    try:
+        if request.op == 'create':
+            # Update the user's shorthand list if the document is not already signed
+            usersread = perform_database_operation(
+            "test", "DocuSealDB", "read", {"email": request.email})
+            if usersread and len(usersread) > 0:
+                if request.serveDoc not in usersread[0]['Shorthand']:
+                    usersread[0]['Shorthand'].append(request.serveDoc)
+
+                    users = perform_database_operation(
+                    "test", "DocuSealDB", "update", {"email": request.email}, {"Shorthand": usersread[0]['Shorthand']}
+                )
+                    if users == 1:
+                        return {"Status": "Added", "Message": "DocuSeal DB Updated"}
+                    else:
+                        raise HTTPException(status_code=404, detail="We couldn't find your account. Please double-check your information and try again.")
+                else:
+                    return {"Status": "Already Signed", "Message": "You have already signed this document."}
+            else:
+                users = perform_database_operation(
+                    "test", "DocuSealDB", "create", {"email": request.email , "Shorthand": [request.serveDoc]}
+                )
+                if len(str(users)) is not None:
+                    return {"Status": "Added", "Message": "DocuSeal DB Updated"}
+                else:
+                    raise HTTPException(status_code=404, detail="We couldn't find your account. Please double-check your information and try again.")
+        # Check if the document is already signed by the user
+        usersread = perform_database_operation(
+            "test", "DocuSealDB", "read", {"email": request.email, "Shorthand": {"$in": [request.serveDoc]}}
+        )
+        if usersread and len(usersread) > 0:
+            return {"Status": "Found", "Message": "Already Signed"}
+        else:
+            return {"Status": "Not Found", "Message": "Not Signed Yet"}
+        
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        print(f"Profile Info Failed: {e}")
+        raise HTTPException(status_code=500, detail="Error In DocuSeal API")
+    
 if __name__ == "__main__":
     import uvicorn
 

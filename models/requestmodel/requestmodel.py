@@ -100,3 +100,6 @@ class AutoMailRequest(BaseModel):
 class DocuSealRequest(BaseModel):
     email: Optional[str] = None
     serveDoc: str
+
+class CheckDocRequest(DocuSealRequest):
+    op: Optional[str] = None
