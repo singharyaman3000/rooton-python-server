@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -40,6 +42,7 @@ from utilities.apithird.docusealapi import get_docuseal_templates_fn
 from utilities.helperfunc.dbfunc import perform_database_operation
 from utilities.helperfunc.slugfinder import get_slug_value
 import base64
+import uuid
 
 
 load_dotenv()
@@ -1403,6 +1406,46 @@ def docuSeal(request: CheckDocRequest):
     except Exception as e:
         print(f"Profile Info Failed: {e}")
         raise HTTPException(status_code=500, detail="Error In DocuSeal API")
+    
+@app.post("/api/create_order", response_model=OrderResponse)
+async def create_order(order_request: OrderRequest):
+    # Generate a unique orderId
+    unique_string = f"{order_request.email}-{order_request.plan_name}-{uuid.uuid4()}"
+    order_id = hashlib.sha256(unique_string.encode()).hexdigest()
+
+    # Here you can add additional logic for Razorpay integration, if needed
+
+    # Return the orderId
+    return OrderResponse(orderId=order_id)
+
+def generated_signature(razorpay_order_id: str, razorpay_payment_id: str) -> str:
+    key_secret = os.getenv("RAZORPAY_API_SECRET")
+    if not key_secret:
+        raise ValueError("Razorpay key secret is not defined in environment variables.")
+    
+    message = f"{razorpay_order_id}|{razorpay_payment_id}"
+    return hmac.new(key_secret.encode(), message.encode(), hashlib.sha256).hexdigest()
+
+@app.post("/api/verify_payment")
+async def verify_payment(payload: PaymentVerificationRequest):
+    try:
+        # Generate the expected signature
+        expected_signature = generated_signature(payload.orderCreationId, payload.razorpayPaymentId)
+        
+        # Compare the signatures
+        if expected_signature != payload.razorpaySignature:
+            return JSONResponse(
+                content={"message": "payment verification failed", "isOk": False},
+                status_code=400
+            )
+
+        return JSONResponse(
+            content={"message": "payment verified successfully", "isOk": True},
+            status_code=200
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     
 if __name__ == "__main__":
     import uvicorn
