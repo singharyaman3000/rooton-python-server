@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 import pandas as pd
 import logging
+import razorpay
 import requests
 import pymongo
 import os
@@ -19,6 +20,8 @@ import time
 from cachetools import TTLCache, cached
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+from .utilities.paymentDB import payments_collection
+import stripe
 from utilities import resetpasswordmail
 from utilities import email_verification
 import secrets
@@ -43,6 +46,7 @@ from utilities.helperfunc.dbfunc import perform_database_operation
 from utilities.helperfunc.slugfinder import get_slug_value
 import base64
 import uuid
+from utilities.paymentDB.payments import create_payment_record, get_payments
 
 
 load_dotenv()
@@ -54,6 +58,9 @@ app = FastAPI()
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 FRONTEND_URL = os.getenv("FRONTEND_URL")
 additional_origin = os.getenv("ADDITIONAL_ORIGIN", "")
+# Stripe and Razorpay setup
+stripe.api_key = os.getenv("STRIPE_API_KEY")
+razorpay_client = razorpay.Client(auth=(os.getenv("RAZORPAY_KEY_ID"), os.getenv("RAZORPAY_SECRET_KEY")))
 
 # Configure CORS
 app.add_middleware(
@@ -1337,7 +1344,7 @@ def automail(request: AutoMailRequest):
 def retainer_function(request: DocuSealRequest):
     try:
         slug = None
-        if len(request.email) is not 0:
+        if len(request.email) != 0:
             finder_string = request.email +'-'+ request.serveDoc
 
             doc = get_docuseal_templates_fn(finder_string)
@@ -1413,8 +1420,6 @@ async def create_order(order_request: OrderRequest):
     unique_string = f"{order_request.email}-{order_request.plan_name}-{uuid.uuid4()}"
     order_id = hashlib.sha256(unique_string.encode()).hexdigest()
 
-    # Here you can add additional logic for Razorpay integration, if needed
-
     # Return the orderId
     return OrderResponse(orderId=order_id)
 
@@ -1446,7 +1451,75 @@ async def verify_payment(payload: PaymentVerificationRequest):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+@app.post("/stripe")
+async def handle_stripe_payment(payment: StripePayment):
+    session = stripe.checkout.sessions.retrieve(payment.session_id)
+    if session.payment_status == 'paid':
+        invoicedata = stripe.invoices.retrieve(session.invoice or '')
+        payment_data = {
+            "user_id": ObjectId(payment.user_id),
+            "payment_gateway": "stripe",
+            "payment_id": session.payment_intent,
+            "amount": session.amount_total,
+            "currency": session.currency.upper(),
+            "status": "succeeded",
+            "created_at": datetime.utcnow(),
+            "details": {
+                "stripe": {
+                    "checkout_session_id": session.id,
+                    "customer_id": session.customer,
+                    "payment_method": session.payment_method_types[0]
+                }
+            },
+            "invoice_id": invoicedata.id if invoicedata else None
+        }
+        payment_id = create_payment_record(payment_data)
+        return {"payment_id": str(payment_id)}
+    else:
+        raise HTTPException(status_code=400, detail="Payment not completed")
+
+@app.post("/razorpay")
+async def handle_razorpay_payment(payment: RazorpayPayment):
+    payment_details = razorpay_client.payment.fetch(payment.payment_id)
+    if payment_details['status'] == 'captured':
+        payment_data = {
+            "user_id": ObjectId(payment.user_id),
+            "payment_gateway": "razorpay",
+            "payment_id": payment.payment_id,
+            "amount": payment_details['amount'],
+            "currency": payment_details['currency'].upper(),
+            "status": "captured",
+            "created_at": datetime.utcnow(),
+            "details": {
+                "razorpay": {
+                    "order_id": payment.order_id,
+                    "payment_method": payment_details['method']
+                }
+            },
+            "invoice_id": None  # Assuming no invoice ID for Razorpay
+        }
+        payment_id = create_payment_record(payment_data)
+        return {"payment_id": str(payment_id)}
+    else:
+        raise HTTPException(status_code=400, detail="Payment not captured")
+
+@app.get("/user/{user_id}")
+async def get_user_payments(user_id: str):
+    query = {"user_id": ObjectId(user_id)}
+    payments = get_payments(query)
+    return payments
+
+@app.get("/{payment_id}")
+async def get_payment_details(payment_id: str):
+    query = {"_id": ObjectId(payment_id)}
+    payment = payments_collection.find_one(query)
+    if payment:
+        return payment
+    else:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+
 if __name__ == "__main__":
     import uvicorn
 

@@ -1,5 +1,6 @@
+from datetime import datetime
 import json
-from typing import List, Optional
+from typing import Dict, List, Optional
 from bson import ObjectId
 from pydantic import BaseModel
 
@@ -115,3 +116,23 @@ class PaymentVerificationRequest(BaseModel):
     orderCreationId: str
     razorpayPaymentId: str
     razorpaySignature: str
+
+class StripePayment(BaseModel):
+    user_id: str
+    session_id: str
+
+class RazorpayPayment(BaseModel):
+    user_id: str
+    order_id: str
+    payment_id: str
+
+class Payment(BaseModel):
+    user_id: str
+    payment_gateway: str
+    payment_id: str
+    amount: int
+    currency: str
+    status: str
+    created_at: datetime
+    details: Dict[str, dict]
+    invoice_id: Optional[str] = None
