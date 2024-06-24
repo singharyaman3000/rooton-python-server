@@ -1394,9 +1394,9 @@ def docuSeal(request: CheckDocRequest):
             "test", "DocuSealDB", "read", {"email": request.email, "Shorthand": {"$in": [request.serveDoc]}}
         )
         if usersread and len(usersread) > 0:
-            return {"Status": "Found", "Message": "Already Signed"}
+            return {"Status": "Found", "isAlreadySigned": True}
         else:
-            return {"Status": "Not Found", "Message": "Not Signed Yet"}
+            return {"Status": "Not Found", "isAlreadySigned": False}
         
     except HTTPException as http_exc:
         raise http_exc
