@@ -101,3 +101,21 @@ def perform_database_operation(database, collection_name, operation_type, query=
             "Invalid operation type. Supported types are 'read', 'update', 'create', and 'delete'."
         )
 
+def MongoConnectPaymentDB():
+    MONGODB_URI = os.getenv("MONGODB_URI")
+    client = pymongo.MongoClient(MONGODB_URI)
+    db = client["test"]
+    payments_collection = db["payments"]
+    return payments_collection
+
+
+def create_payment_record(payment_data: dict):
+    payments_collection = MongoConnectPaymentDB()
+    payement_id = payments_collection.insert_one(payment_data).inserted_id
+    return payement_id
+
+def get_payments(query: dict):
+    payments_collection = MongoConnectPaymentDB()
+    return list(payments_collection.find(query))
+
+

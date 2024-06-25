@@ -118,16 +118,16 @@ class PaymentVerificationRequest(BaseModel):
     razorpaySignature: str
 
 class StripePayment(BaseModel):
-    user_id: str
+    email: str
     session_id: str
 
 class RazorpayPayment(BaseModel):
-    user_id: str
+    email: str
     order_id: str
     payment_id: str
 
 class Payment(BaseModel):
-    user_id: str
+    email: str
     payment_gateway: str
     payment_id: str
     amount: int

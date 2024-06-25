@@ -20,7 +20,6 @@ import time
 from cachetools import TTLCache, cached
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
-from .utilities.paymentDB import payments_collection
 import stripe
 from utilities import resetpasswordmail
 from utilities import email_verification
@@ -42,11 +41,10 @@ import requests
 from models import *
 from utilities.emails.satbulkmail import satbulkmail
 from utilities.apithird.docusealapi import get_docuseal_templates_fn
-from utilities.helperfunc.dbfunc import perform_database_operation
+from utilities.helperfunc.dbfunc import MongoConnectPaymentDB, perform_database_operation, create_payment_record, get_payments
 from utilities.helperfunc.slugfinder import get_slug_value
 import base64
 import uuid
-from utilities.paymentDB.payments import create_payment_record, get_payments
 
 
 load_dotenv()
@@ -59,8 +57,8 @@ allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",
 FRONTEND_URL = os.getenv("FRONTEND_URL")
 additional_origin = os.getenv("ADDITIONAL_ORIGIN", "")
 # Stripe and Razorpay setup
-stripe.api_key = os.getenv("STRIPE_API_KEY")
-razorpay_client = razorpay.Client(auth=(os.getenv("RAZORPAY_KEY_ID"), os.getenv("RAZORPAY_SECRET_KEY")))
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+
 
 # Configure CORS
 app.add_middleware(
@@ -1429,7 +1427,9 @@ def generated_signature(razorpay_order_id: str, razorpay_payment_id: str) -> str
         raise ValueError("Razorpay key secret is not defined in environment variables.")
     
     message = f"{razorpay_order_id}|{razorpay_payment_id}"
-    return hmac.new(key_secret.encode(), message.encode(), hashlib.sha256).hexdigest()
+    signature = hmac.new(key_secret.encode(), message.encode(), hashlib.sha256).hexdigest()
+
+    return signature
 
 @app.post("/api/verify_payment")
 async def verify_payment(payload: PaymentVerificationRequest):
@@ -1452,13 +1452,14 @@ async def verify_payment(payload: PaymentVerificationRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/stripe")
+@app.post("/api/stripe")
 async def handle_stripe_payment(payment: StripePayment):
-    session = stripe.checkout.sessions.retrieve(payment.session_id)
+    session = stripe.checkout.Session.retrieve(payment.session_id)
     if session.payment_status == 'paid':
-        invoicedata = stripe.invoices.retrieve(session.invoice or '')
+        invoicedata = stripe.Invoice.retrieve(session.invoice or '')
+        print(invoicedata)
         payment_data = {
-            "user_id": ObjectId(payment.user_id),
+            "email": payment.email,
             "payment_gateway": "stripe",
             "payment_id": session.payment_intent,
             "amount": session.amount_total,
@@ -1472,19 +1473,23 @@ async def handle_stripe_payment(payment: StripePayment):
                     "payment_method": session.payment_method_types[0]
                 }
             },
-            "invoice_id": invoicedata.id if invoicedata else None
+            "invoice_id": invoicedata.id if invoicedata else None,
+            "invoice_url": invoicedata.hosted_invoice_url if invoicedata else None
         }
         payment_id = create_payment_record(payment_data)
+
         return {"payment_id": str(payment_id)}
     else:
         raise HTTPException(status_code=400, detail="Payment not completed")
 
-@app.post("/razorpay")
+@app.post("/api/razorpay")
 async def handle_razorpay_payment(payment: RazorpayPayment):
+    razorpay_client = razorpay.Client(auth=(os.getenv("RAZORPAY_API_KEY"), os.getenv("RAZORPAY_API_SECRET")))
     payment_details = razorpay_client.payment.fetch(payment.payment_id)
+    print(payment_details)
     if payment_details['status'] == 'captured':
         payment_data = {
-            "user_id": ObjectId(payment.user_id),
+            "email": payment.email,
             "payment_gateway": "razorpay",
             "payment_id": payment.payment_id,
             "amount": payment_details['amount'],
@@ -1504,18 +1509,26 @@ async def handle_razorpay_payment(payment: RazorpayPayment):
     else:
         raise HTTPException(status_code=400, detail="Payment not captured")
 
-@app.get("/user/{user_id}")
-async def get_user_payments(user_id: str):
-    query = {"user_id": ObjectId(user_id)}
-    payments = get_payments(query)
+
+def serialize_payments(payments):
+    for payment in payments:
+        payment["_id"] = str(payment["_id"])
     return payments
 
-@app.get("/{payment_id}")
+@app.get("/api/user/payments", response_model=List[dict])
+async def get_user_payments(email: str = Depends(get_current_user)):
+    query = {"email": "aryaman.singh@gmail.com"}
+    payments = get_payments(query)
+    return serialize_payments(payments)
+
+@app.get("/api/fetch/payment_id")
 async def get_payment_details(payment_id: str):
     query = {"_id": ObjectId(payment_id)}
+    payments_collection = MongoConnectPaymentDB()
     payment = payments_collection.find_one(query)
+    print(payment)
     if payment:
-        return payment
+        return serialize_payments(payment)
     else:
         raise HTTPException(status_code=404, detail="Payment not found")
 
