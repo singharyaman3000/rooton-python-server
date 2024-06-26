@@ -181,6 +181,9 @@ async def authorize_google(request: Request):
         # Authlib checks the state parameter against the session automatically
         token = await oauth.google.authorize_access_token(request)
         # If we get here, the state check has passed
+        if not token:
+            # User has canceled the authorization
+            return RedirectResponse(url=frontend_url + "/login")
         user_data = token.get('userinfo')
         if user_data:
         # Handle user login or registration here
@@ -1409,17 +1412,9 @@ def docuSeal(request: CheckDocRequest):
     except HTTPException as http_exc:
         raise http_exc
     except Exception as e:
-        print(f"Profile Info Failed: {e}")
+        print(f"DocuSeal API Failed: {e}")
         raise HTTPException(status_code=500, detail="Error In DocuSeal API")
     
-@app.post("/api/create_order", response_model=OrderResponse)
-async def create_order(order_request: OrderRequest):
-    # Generate a unique orderId
-    unique_string = f"{order_request.email}-{order_request.plan_name}-{uuid.uuid4()}"
-    order_id = hashlib.sha256(unique_string.encode()).hexdigest()
-
-    # Return the orderId
-    return OrderResponse(orderId=order_id)
 
 def generated_signature(razorpay_order_id: str, razorpay_payment_id: str) -> str:
     key_secret = os.getenv("RAZORPAY_API_SECRET")
@@ -1448,66 +1443,80 @@ async def verify_payment(payload: PaymentVerificationRequest):
             content={"message": "payment verified successfully", "isOk": True},
             status_code=200
         )
-    
+    except HTTPException as http_exc:
+        raise http_exc
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Verify Payment API Failed: {e}")
+        raise HTTPException(status_code=500, detail="Error In Verify Payment API")
 
 @app.post("/api/stripe")
 async def handle_stripe_payment(payment: StripePayment):
-    session = stripe.checkout.Session.retrieve(payment.session_id)
-    if session.payment_status == 'paid':
-        invoicedata = stripe.Invoice.retrieve(session.invoice or '')
-        print(invoicedata)
-        payment_data = {
-            "email": session.customer_email,
-            "payment_gateway": "stripe",
-            "payment_id": session.payment_intent,
-            "amount": session.amount_total,
-            "currency": session.currency.upper(),
-            "status": "succeeded",
-            "created_at": datetime.fromtimestamp(session.created).strftime('%Y-%m-%d %H:%M:%S'),
-            "details": {
-                "stripe": {
-                    "checkout_session_id": session.id,
-                    "customer_id": session.customer,
-                    "payment_method": session.payment_method_types[0]
-                }
-            },
-            "invoice_id": invoicedata.id if invoicedata else None,
-            "invoice_url": invoicedata.hosted_invoice_url if invoicedata else None
-        }
-        payment_id = create_payment_record(payment_data)
+    try:
+        session = stripe.checkout.Session.retrieve(payment.session_id)
+        if session.payment_status == 'paid':
+            invoicedata = stripe.Invoice.retrieve(session.invoice or '')
 
-        return {"payment_id": str(payment_id)}
-    else:
-        raise HTTPException(status_code=400, detail="Payment not completed")
+            payment_data = {
+                "email": session.customer_email,
+                "payment_gateway": "stripe",
+                "payment_id": session.payment_intent,
+                "amount": session.amount_total,
+                "currency": session.currency.upper(),
+                "status": "succeeded",
+                "created_at": datetime.fromtimestamp(session.created).strftime('%Y-%m-%d %H:%M:%S'),
+                "details": {
+                    "stripe": {
+                        "checkout_session_id": session.id,
+                        "customer_id": session.customer,
+                        "payment_method": session.payment_method_types[0]
+                    }
+                },
+                "invoice_id": invoicedata.id if invoicedata else None,
+                "invoice_url": invoicedata.hosted_invoice_url if invoicedata else None
+            }
+            payment_id = create_payment_record(payment_data)
+
+            return {"payment_id": str(payment_id)}
+        else:
+            raise HTTPException(status_code=400, detail="Payment not completed")
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        print(f"Stripe PaymentDB API Failed: {e}")
+        raise HTTPException(status_code=500, detail="Error In Stripe PaymentDB API")
 
 @app.post("/api/razorpay")
 async def handle_razorpay_payment(payment: RazorpayPayment):
-    razorpay_client = razorpay.Client(auth=(os.getenv("RAZORPAY_API_KEY"), os.getenv("RAZORPAY_API_SECRET")))
-    payment_details = razorpay_client.payment.fetch(payment.payment_id)
-    print(payment_details)
-    if payment_details['status'] == 'captured':
-        payment_data = {
-            "email": payment.email,
-            "payment_gateway": "razorpay",
-            "payment_id": payment.payment_id,
-            "amount": payment_details['amount'],
-            "currency": payment_details['currency'].upper(),
-            "status": "captured",
-            "created_at": datetime.fromtimestamp(payment_details['created_at']).strftime('%Y-%m-%d %H:%M:%S'),
-            "details": {
-                "razorpay": {
-                    "order_id": payment.order_id,
-                    "payment_method": payment_details['method']
-                }
-            },
-            "invoice_id": None  # Assuming no invoice ID for Razorpay
-        }
-        payment_id = create_payment_record(payment_data)
-        return {"payment_id": str(payment_id)}
-    else:
-        raise HTTPException(status_code=400, detail="Payment not captured")
+    try:
+        razorpay_client = razorpay.Client(auth=(os.getenv("RAZORPAY_API_KEY"), os.getenv("RAZORPAY_API_SECRET")))
+        payment_details = razorpay_client.payment.fetch(payment.payment_id)
+
+        if payment_details['status'] == 'captured':
+            payment_data = {
+                "email": payment.email,
+                "payment_gateway": "razorpay",
+                "payment_id": payment.payment_id,
+                "amount": payment_details['amount'],
+                "currency": payment_details['currency'].upper(),
+                "status": "captured",
+                "created_at": datetime.fromtimestamp(payment_details['created_at']).strftime('%Y-%m-%d %H:%M:%S'),
+                "details": {
+                    "razorpay": {
+                        "order_id": payment.order_id,
+                        "payment_method": payment_details['method']
+                    }
+                },
+                "invoice_id": None  # Assuming no invoice ID for Razorpay
+            }
+            payment_id = create_payment_record(payment_data)
+            return {"payment_id": str(payment_id)}
+        else:
+            raise HTTPException(status_code=400, detail="Payment not captured")
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        print(f"Razorpay PaymentDB API Failed: {e}")
+        raise HTTPException(status_code=500, detail="Error In Razorpay PaymentDB API")
 
 
 def serialize_payments(payments):
@@ -1525,26 +1534,34 @@ def serialize_payments_with_id(payment):
 
 @app.get("/api/user/payments", response_model=List[dict])
 async def get_user_payments(email: str = Depends(get_current_user)):
-    query = {"email": email}
-    payments = get_payments(query)
-    return serialize_payments(payments)
+    try:
+        query = {"email": email}
+        payments = get_payments(query)
+        return serialize_payments(payments)
+    except Exception as e:
+        logging.error(f"Error in getting payments: {e}")
+        raise HTTPException(status_code=500, detail="Error processing payments")
 
 @app.get("/api/fetch/payId/{payment_id}")
 async def get_payment_details(payment_id: str):
-    query = {"_id": ObjectId(payment_id)}
-    payments_collection = MongoConnectPaymentDB()
-    payment = payments_collection.find_one(query)
+    try:
+        query = {"_id": ObjectId(payment_id)}
+        payments_collection = MongoConnectPaymentDB()
+        payment = payments_collection.find_one(query)
 
-    if payment:
-        try:
-            serialized_payment = serialize_payments_with_id(payment)
-            logging.debug(f"Serialized payment: {serialized_payment}")
-            return serialized_payment
-        except Exception as e:
-            logging.error(f"Error in serializing payment: {e}")
-            raise HTTPException(status_code=500, detail="Error processing payment details")
-    else:
-        raise HTTPException(status_code=404, detail="Payment not found")
+        if payment:
+            try:
+                serialized_payment = serialize_payments_with_id(payment)
+                logging.debug(f"Serialized payment: {serialized_payment}")
+                return serialized_payment
+            except Exception as e:
+                logging.error(f"Error in serializing payment: {e}")
+                raise HTTPException(status_code=500, detail="Error processing payment details")
+        else:
+            raise HTTPException(status_code=404, detail="Payment not found")
+    except Exception as e:
+        logging.error(f"Error in getting payment details by Id: {e}")
+        raise HTTPException(status_code=500, detail="Error processing payment details by Id")
 
 
 if __name__ == "__main__":

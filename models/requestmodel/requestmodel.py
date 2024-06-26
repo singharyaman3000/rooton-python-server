@@ -105,13 +105,6 @@ class DocuSealRequest(BaseModel):
 class CheckDocRequest(DocuSealRequest):
     op: Optional[str] = None
 
-class OrderRequest(BaseModel):
-    email: str
-    plan_name: str
-
-class OrderResponse(BaseModel):
-    orderId: str
-
 class PaymentVerificationRequest(BaseModel):
     orderCreationId: str
     razorpayPaymentId: str
