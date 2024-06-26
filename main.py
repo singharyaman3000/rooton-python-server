@@ -1459,13 +1459,13 @@ async def handle_stripe_payment(payment: StripePayment):
         invoicedata = stripe.Invoice.retrieve(session.invoice or '')
         print(invoicedata)
         payment_data = {
-            "email": payment.email,
+            "email": session.customer_email,
             "payment_gateway": "stripe",
             "payment_id": session.payment_intent,
             "amount": session.amount_total,
             "currency": session.currency.upper(),
             "status": "succeeded",
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.fromtimestamp(session.created).strftime('%Y-%m-%d %H:%M:%S'),
             "details": {
                 "stripe": {
                     "checkout_session_id": session.id,
@@ -1495,7 +1495,7 @@ async def handle_razorpay_payment(payment: RazorpayPayment):
             "amount": payment_details['amount'],
             "currency": payment_details['currency'].upper(),
             "status": "captured",
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.fromtimestamp(payment_details['created_at']).strftime('%Y-%m-%d %H:%M:%S'),
             "details": {
                 "razorpay": {
                     "order_id": payment.order_id,
@@ -1515,20 +1515,34 @@ def serialize_payments(payments):
         payment["_id"] = str(payment["_id"])
     return payments
 
+def serialize_payments_with_id(payment):
+    if isinstance(payment, dict):
+        payment["_id"] = str(payment["_id"])
+        return payment
+    else:
+        raise ValueError("Expected payment to be a dictionary")
+
+
 @app.get("/api/user/payments", response_model=List[dict])
 async def get_user_payments(email: str = Depends(get_current_user)):
-    query = {"email": "aryaman.singh@gmail.com"}
+    query = {"email": email}
     payments = get_payments(query)
     return serialize_payments(payments)
 
-@app.get("/api/fetch/payment_id")
+@app.get("/api/fetch/payId/{payment_id}")
 async def get_payment_details(payment_id: str):
     query = {"_id": ObjectId(payment_id)}
     payments_collection = MongoConnectPaymentDB()
     payment = payments_collection.find_one(query)
-    print(payment)
+
     if payment:
-        return serialize_payments(payment)
+        try:
+            serialized_payment = serialize_payments_with_id(payment)
+            logging.debug(f"Serialized payment: {serialized_payment}")
+            return serialized_payment
+        except Exception as e:
+            logging.error(f"Error in serializing payment: {e}")
+            raise HTTPException(status_code=500, detail="Error processing payment details")
     else:
         raise HTTPException(status_code=404, detail="Payment not found")
 
