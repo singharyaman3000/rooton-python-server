@@ -178,6 +178,14 @@ async def authorize_google(request: Request):
         frontend_url = request.session.get('frontend_url')
         if not frontend_url:
             frontend_url = FRONTEND_URL
+        if 'error' in request.query_params:
+            error = request.query_params['error']
+            if error == 'access_denied':
+                logging.warning("User denied access during OAuth process.")
+                return RedirectResponse(url=frontend_url + "/login")
+            else:
+                logging.error(f"OAuth error: {error}")
+                return RedirectResponse(url=frontend_url + "/login")
         # Authlib checks the state parameter against the session automatically
         token = await oauth.google.authorize_access_token(request)
         # If we get here, the state check has passed
