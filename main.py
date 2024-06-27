@@ -1484,7 +1484,7 @@ async def handle_stripe_payment(payment: StripePayment):
             }
             payment_id = create_payment_record(payment_data)
 
-            return {"payment_id": str(payment_id)}
+            return {"saved": True}
         else:
             raise HTTPException(status_code=400, detail="Payment not completed")
     except HTTPException as http_exc:
@@ -1517,7 +1517,7 @@ async def handle_razorpay_payment(payment: RazorpayPayment):
                 "invoice_id": None  # Assuming no invoice ID for Razorpay
             }
             payment_id = create_payment_record(payment_data)
-            return {"payment_id": str(payment_id)}
+            return {"saved": True}
         else:
             raise HTTPException(status_code=400, detail="Payment not captured")
     except HTTPException as http_exc:
