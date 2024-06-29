@@ -71,7 +71,7 @@ Software Development Engineer
                                         <p style="color: #555555; font-size: 16px; line-height: 1.6; margin: 20px 0;">We have received a payment via Razorpay. Below are the details:</p>
                                         <p style="color: #555555; font-size: 16px; line-height: 1.6; margin: 20px 0;"><strong>Client Name:</strong> {client_name}</p>
                                         <p style="color: #555555; font-size: 16px; line-height: 1.6; margin: 20px 0;"><strong>Client Email:</strong> {client_email}</p>
-                                        <p style="color: #555555; font-size: 16px; line-height: 1.6; word-break: break-all; margin: 20px 0;"><strong>Billing Address:</strong> scgsccyscygysyiscsiucuicbiusbciubsicbsbcisbiucbsuicbsibc, scusgcubcsubcushcusbubsubvbv, shuchsucsuicnsiciscubsdkucbkusdhvusdhvugvigsdivgisvssbv, dsuhdsbvksdbvskdb</p>
+                                        <p style="color: #555555; font-size: 16px; line-height: 1.6; word-break: break-all; margin: 20px 0;"><strong>Billing Address:</strong>{client_address}</p>
                                         <p style="color: #555555; font-size: 16px; line-height: 1.6; margin: 20px 0;"><strong>{gst_info}</strong></p>
                                         <p style="color: #555555; font-size: 16px; line-height: 1.6; margin: 20px 0;"><strong>Amount:</strong> ₹{payment_amount}</p>
                                         <p style="color: #555555; font-size: 16px; line-height: 1.6; margin: 20px 0;"><strong>Razorpay Payment ID:</strong> {payment_id}</p>

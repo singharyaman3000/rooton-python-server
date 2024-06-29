@@ -1462,7 +1462,7 @@ async def verify_payment(payload: PaymentVerificationRequest):
 async def handle_stripe_payment(payment: StripePayment):
     try:
         session = stripe.checkout.Session.retrieve(payment.session_id)
-        return (session)
+
         if session.payment_status == 'paid':
             invoicedata = stripe.Invoice.retrieve(session.invoice or '')
 
@@ -1501,11 +1501,10 @@ async def handle_razorpay_payment(payment: RazorpayPayment):
     try:
         razorpay_client = razorpay.Client(auth=(os.getenv("RAZORPAY_API_KEY"), os.getenv("RAZORPAY_API_SECRET")))
         payment_details = razorpay_client.payment.fetch(payment.payment_id)
-
         if payment_details['status'] == 'captured':
             created_at = datetime.fromtimestamp(payment_details['created_at']).strftime('%Y-%m-%d %H:%M:%S')
             payment_data = {
-                "email": payment.email,
+                "email": payment_details['notes']['email'],
                 "name": payment_details['notes']['name'],
                 "payment_gateway": "razorpay",
                 "payment_id": payment.payment_id,
@@ -1522,11 +1521,11 @@ async def handle_razorpay_payment(payment: RazorpayPayment):
                 "invoice_id": None  # Assuming no invoice ID for Razorpay
             }
             payment_id = create_payment_record(payment_data)
-            paymailtoacc(payment_id=payment.payment_id, payment_amount=payment_details['amount']/100, payment_date=created_at, client_name=payment_details['notes']['name'],client_email=payment_details['email'], client_address=payment_details['notes']['address'], service_plan=payment_details['notes']['serviceName'], client_gst=payment_details['notes'].get('gst', None))
+            paymailtoacc(payment_id=payment.payment_id, payment_amount=payment_details['amount']/100, payment_date=created_at, client_name=payment_details['notes']['name'],client_email=payment_details['notes']['email'], client_address=payment_details['notes']['address'], service_plan=payment_details['notes']['serviceName'], client_gst=payment_details['notes'].get('gst', None))
             if payment_id:
                 return {"saved": True}
             else :
-                raise HTTPException(status_code=400, detail="Payment record not capturedin DB")
+                raise HTTPException(status_code=400, detail="Payment record not captured in DB")
         else:
             raise HTTPException(status_code=400, detail="Payment not captured")
     except HTTPException as http_exc:
