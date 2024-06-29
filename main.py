@@ -39,6 +39,7 @@ from starlette.datastructures import URL
 import traceback
 import requests
 from models import *
+from utilities.emails.paymentmail import paymailtoacc
 from utilities.emails.satbulkmail import satbulkmail
 from utilities.apithird.docusealapi import get_docuseal_templates_fn
 from utilities.helperfunc.dbfunc import MongoConnectPaymentDB, perform_database_operation, create_payment_record, get_payments
@@ -1461,11 +1462,13 @@ async def verify_payment(payload: PaymentVerificationRequest):
 async def handle_stripe_payment(payment: StripePayment):
     try:
         session = stripe.checkout.Session.retrieve(payment.session_id)
+        return (session)
         if session.payment_status == 'paid':
             invoicedata = stripe.Invoice.retrieve(session.invoice or '')
 
             payment_data = {
                 "email": session.customer_email,
+                "name": session.customer_details.name,
                 "payment_gateway": "stripe",
                 "payment_id": session.payment_intent,
                 "amount": session.amount_total,
@@ -1500,14 +1503,16 @@ async def handle_razorpay_payment(payment: RazorpayPayment):
         payment_details = razorpay_client.payment.fetch(payment.payment_id)
 
         if payment_details['status'] == 'captured':
+            created_at = datetime.fromtimestamp(payment_details['created_at']).strftime('%Y-%m-%d %H:%M:%S')
             payment_data = {
                 "email": payment.email,
+                "name": payment_details['notes']['name'],
                 "payment_gateway": "razorpay",
                 "payment_id": payment.payment_id,
                 "amount": payment_details['amount'],
                 "currency": payment_details['currency'].upper(),
                 "status": "captured",
-                "created_at": datetime.fromtimestamp(payment_details['created_at']).strftime('%Y-%m-%d %H:%M:%S'),
+                "created_at": created_at,
                 "details": {
                     "razorpay": {
                         "order_id": payment.order_id,
@@ -1517,7 +1522,11 @@ async def handle_razorpay_payment(payment: RazorpayPayment):
                 "invoice_id": None  # Assuming no invoice ID for Razorpay
             }
             payment_id = create_payment_record(payment_data)
-            return {"saved": True}
+            paymailtoacc(payment_id=payment.payment_id, payment_amount=payment_details['amount']/100, payment_date=created_at, client_name=payment_details['notes']['name'],client_email=payment_details['email'], client_address=payment_details['notes']['address'], service_plan=payment_details['notes']['serviceName'], client_gst=payment_details['notes'].get('gst', None))
+            if payment_id:
+                return {"saved": True}
+            else :
+                raise HTTPException(status_code=400, detail="Payment record not capturedin DB")
         else:
             raise HTTPException(status_code=400, detail="Payment not captured")
     except HTTPException as http_exc:
