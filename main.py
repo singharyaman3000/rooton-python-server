@@ -42,10 +42,10 @@ from models import *
 from utilities.emails.paymentmail import paymailtoacc
 from utilities.emails.satbulkmail import satbulkmail
 from utilities.apithird.docusealapi import get_docuseal_templates_fn
-from utilities.helperfunc.dbfunc import MongoConnectPaymentDB, perform_database_operation, create_payment_record, get_payments
+from utilities.helperfunc.dbfunc import MongoConnectPaymentDB, perform_database_operation, create_payment_record, get_payments, perform_database_operation_docuseal
 from utilities.helperfunc.slugfinder import get_slug_value
 import base64
-import uuid
+import asyncio
 
 
 load_dotenv()
@@ -1382,48 +1382,39 @@ def retainer_function(request: DocuSealRequest):
         raise HTTPException(status_code=500, detail="We're having trouble processing your request right now. Please try again later.")
     
 @app.put("/api/docusealCheck")
-def docuSeal(request: CheckDocRequest):
+async def docuSeal(request: CheckDocRequest):
     try:
+        user = await perform_database_operation_docuseal(
+            "test", "DocuSealDB", "read", {"email": request.email}
+        )
         if request.op == 'create':
-            # Update the user's shorthand list if the document is not already signed
-            usersread = perform_database_operation(
-            "test", "DocuSealDB", "read", {"email": request.email})
-            if usersread and len(usersread) > 0:
-                if request.serveDoc not in usersread[0]['Shorthand']:
-                    usersread[0]['Shorthand'].append(request.serveDoc)
-
-                    users = perform_database_operation(
-                    "test", "DocuSealDB", "update", {"email": request.email}, {"Shorthand": usersread[0]['Shorthand']}
-                )
-                    if users == 1:
+            if user and len(user) > 0:
+                if request.serveDoc not in user[0]['Shorthand']:
+                    user[0]['Shorthand'].append(request.serveDoc)
+                    update_result = await perform_database_operation_docuseal(
+                        "test", "DocuSealDB", "update", {"email": request.email}, {"Shorthand": user[0]['Shorthand']}
+                    )
+                    if update_result == 1:
                         return {"Status": "Added", "Message": "DocuSeal DB Updated"}
                     else:
                         raise HTTPException(status_code=404, detail="We couldn't find your account. Please double-check your information and try again.")
                 else:
                     return {"Status": "Already Signed", "Message": "You have already signed this document."}
             else:
-                users = perform_database_operation(
-                    "test", "DocuSealDB", "create", {"email": request.email , "Shorthand": [request.serveDoc]}
+                create_result = await perform_database_operation_docuseal(
+                    "test", "DocuSealDB", "create", {"email": request.email, "Shorthand": [request.serveDoc]}
                 )
-                if len(str(users)) is not None:
+                if create_result:
                     return {"Status": "Added", "Message": "DocuSeal DB Updated"}
                 else:
                     raise HTTPException(status_code=404, detail="We couldn't find your account. Please double-check your information and try again.")
-        # Check if the document is already signed by the user
-        usersread = perform_database_operation(
-            "test", "DocuSealDB", "read", {"email": request.email, "Shorthand": {"$in": [request.serveDoc]}}
-        )
-        if usersread and len(usersread) > 0:
-            return {"Status": "Found", "isAlreadySigned": True}
         else:
-            return {"Status": "Not Found", "isAlreadySigned": False}
-        
-    except HTTPException as http_exc:
-        raise http_exc
+            if user and len(user) > 0 and request.serveDoc in user[0]['Shorthand']:
+                return {"Status": "Found", "isAlreadySigned": True}
+            else:
+                return {"Status": "Not Found", "isAlreadySigned": False}
     except Exception as e:
-        print(f"DocuSeal API Failed: {e}")
-        raise HTTPException(status_code=500, detail="Error In DocuSeal API")
-    
+        raise HTTPException(status_code=500, detail=str(e))
 
 def generated_signature(razorpay_order_id: str, razorpay_payment_id: str) -> str:
     key_secret = os.getenv("RAZORPAY_API_SECRET")
