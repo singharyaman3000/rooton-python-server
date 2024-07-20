@@ -52,6 +52,8 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+backup/
+vectorstores/
 
 # Translations
 *.mo
@@ -117,7 +119,7 @@ celerybeat.pid
 .env
 .venv
 env/
-venv/
+venv1/
 ENV/
 env.bak/
 venv.bak/
@@ -152,3 +154,4 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+/.venv1

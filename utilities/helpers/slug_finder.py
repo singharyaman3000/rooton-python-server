@@ -1,4 +1,4 @@
-from .dbfunc import perform_database_operation
+from .db_helper import perform_database_operation
 
 def get_slug_value(docShorthand):
     query = {"key": docShorthand}
