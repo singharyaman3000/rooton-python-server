@@ -1,7 +1,14 @@
 
-from imports import pd, openai, os, HTTPException, re, sk, traceback, TfidfVectorizer
+from imports import pd, os, HTTPException, re, sk, traceback, TfidfVectorizer
+from openai import OpenAI
+from dotenv import load_dotenv
+
+load_dotenv()
 
 pd.options.mode.chained_assignment = None
+
+api_key=os.getenv("OPENAI_API_KEY")
+client = OpenAI()
 
 def process_budget(budget_str):
     """Extract the lower and upper fee limits from the budget string."""
@@ -15,24 +22,19 @@ def process_budget(budget_str):
 
 def GPTfunction(messages, max_tokens_count=350, text=False, usedmodel="gpt-4o"):
     try:
-        openai.api_key = os.getenv("OPEN_AI_KEY")
         if text:
-            response = openai.Completion.create(
-                model=usedmodel,
-                prompt=messages,
-                temperature=0.7,
-                max_tokens=max_tokens_count,
-            )
-            message = response["choices"][0]["text"]
+            response = client.completions.create(model=usedmodel,
+            prompt=messages,
+            temperature=0.7,
+            max_tokens=max_tokens_count)
+            message = response.choices[0].text
             return message
         else:
-            response = openai.ChatCompletion.create(
-                model=usedmodel,
-                messages=messages,
-                # temperature=0.7,
-                max_tokens=max_tokens_count,
-            )
-            message = response["choices"][0]["message"]["content"]
+            response = client.chat.completions.create(model=usedmodel,
+            messages=messages,
+            # temperature=0.7,
+            max_tokens=max_tokens_count)
+            message = response.choices[0].message.content
             return message
     except Exception as e:
         print(e)

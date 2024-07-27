@@ -67,9 +67,6 @@ def fetch_all_data(database, collection):
 docs_cache = TTLCache(maxsize=1000000, ttl=86400)
 
 
-
-
-
 async def preload_cache():
     try:
         # Preload data for each collection
@@ -318,8 +315,6 @@ async def recommend_courses(request: CourseRequest, email: str = Depends(get_cur
         if selected_fos == "":
             response = {"Error": "Looks like you missed selecting a field of study. Please make a selection to move forward."}
             raise HTTPException(status_code=500, detail=response)
-        
-        openai.api_key = os.getenv("OPEN_AI_KEY")
 
         core_selected_fos=selected_fos
         if not request.toggle:
@@ -1242,10 +1237,10 @@ def RAG_Loader():
 
     {context}
 
-    When a user inquires about their chances or eligibility for Permanent Residency (PR) in Canada through the Ontario immigration nominee program (OINP), engage in a detailed question-and-answer session to gather necessary information.
+    When a user inquires about their chances or eligibility for Permanent Residency (PR) in Canada through the Ontario immigration nominee program (OINP), engage in a small small question-and-answer session to gather necessary information.
     Evaluate previous interactions to ensure you have all relevant details.
-    Once you are confident in your understanding, provide a precise answer with supporting insights.
-    Keep the conversation clear and focused, summarizing key points and offering actionable advice when appropriate."""
+    Once you are confident in your understanding, provide a precise & concise answer with supporting insights.
+    Keep the conversation clear and focused, summarizing key points in a concise manner and offering actionable advice when appropriate."""
     qa_prompt = ChatPromptTemplate.from_messages(
         [
             ("system", qa_system_prompt),
@@ -1283,6 +1278,11 @@ class ConnectionManager:
         websocket = self.active_connections.get(session_id)
         if websocket:
             await websocket.send_text(message)
+    
+    async def send_rag_response(self, message: str, session_id: str):
+        websocket = self.active_connections.get(session_id)
+        if websocket:
+            await websocket.send_json({"session_id": session_id, "message": message})
 
     async def broadcast(self, message: str):
         for connection in self.active_connections.values():
@@ -1307,7 +1307,7 @@ async def websocket_endpoint(websocket: WebSocket):
             message = data["message"]
             response = await handle_message(session_id, message)
             print(response)
-            await manager.send_personal_message(response, session_id)
+            await manager.send_rag_response(response, session_id)
     except WebSocketDisconnect:
         print("Bye Bye")
         manager.disconnect(session_id)

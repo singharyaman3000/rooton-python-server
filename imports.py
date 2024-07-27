@@ -38,7 +38,7 @@ import pandas as pd
 import razorpay
 import requests
 import pymongo
-import openai
+from openai import OpenAI
 import authlib
 import stripe
 import bcrypt
