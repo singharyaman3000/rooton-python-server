@@ -1189,77 +1189,11 @@ async def get_payment_details(payment_id: str):
         logging.error(f"Error in getting payment details by Id: {e}")
         raise HTTPException(status_code=500, detail="Error processing payment details by Id")
 
-def get_session_history(session_id: str) -> BaseChatMessageHistory:
-    # print("New session")
-    print(store)
-    # print(qa_prompt)
-    if session_id not in store:
-      store[session_id] = ChatMessageHistory()
-    return store[session_id]
+
 
 def save_session_history(session_id: str, history):
     print(f"Saving session history: {history}")
     redis_client.set(session_id, json.dumps(history))
-
-def RAG_Loader():
-    llm = ChatOpenAI(model="gpt-4o", temperature=0)
-
-    docs = load_documents()
-    print(f"Loaded {len(docs)} documents")
-
-
-    # text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    # splits = text_splitter.split_documents(docs)
-    vectorstore = cache_vectorstore_and_embeddings(docs)
-
-    retriever = vectorstore.as_retriever()
-    print("hERE??")
-    # Contextualize question
-    contextualize_q_system_prompt = """Given a chat history and the latest user question \
-    which might reference context in the chat history, formulate a standalone question \
-    which can be understood without the chat history. Do NOT answer the question, \
-    just reformulate it if needed and otherwise return it as is."""
-    contextualize_q_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", contextualize_q_system_prompt),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}"),
-        ]
-    )
-    history_aware_retriever = create_history_aware_retriever(
-        llm, retriever, contextualize_q_prompt
-    )
-
-    # Answer question
-    qa_system_prompt = """You are an assistant specialized in answering questions about Permanent Residency (PR) in Canada through the Ontario immigration nominee program (OINP).
-    Use the following retrieved context to answer user queries accurately.
-    If the answer isn't clear from the provided information, ask further questions to get more details about the user.
-
-    {context}
-
-    When a user inquires about their chances or eligibility for Permanent Residency (PR) in Canada through the Ontario immigration nominee program (OINP), engage in a small small question-and-answer session to gather necessary information.
-    Evaluate previous interactions to ensure you have all relevant details.
-    Once you are confident in your understanding, provide a precise & concise answer with supporting insights.
-    Keep the conversation clear and focused, summarizing key points in a concise manner and offering actionable advice when appropriate."""
-    qa_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", qa_system_prompt),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}"),
-        ]
-    )
-    question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
-
-    rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
-
-    runnable_rag_chain = RunnableWithMessageHistory(
-        rag_chain,
-        get_session_history,
-        input_messages_key="input",
-        history_messages_key="chat_history",
-        output_messages_key="answer",
-    )
-    return runnable_rag_chain
 
 conversational_rag_chain = RAG_Loader()
 
@@ -1290,7 +1224,7 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-store = {}
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
