@@ -30,18 +30,6 @@ app.add_middleware(SessionMiddleware, secret_key=os.getenv("Session_SECRET_KEY")
 # Pandas ki SettingWithCopyWarning ko globally suppress karna
 pd.options.mode.chained_assignment = None  # default='warn'
 
-# Initialize Redis client
-redis_client = redis.Redis(
-  host='redis-17155.c263.us-east-1-2.ec2.redns.redis-cloud.com',
-  port=17155,
-  password='Xcke6Zg5k0W3qoZX8EbRda8HzrBfg169')
-
-redis_client = redis.Redis(
-    host=os.getenv('REDIS_HOST', 'localhost'),
-    port=int(os.getenv('REDIS_PORT', 6379)),
-    password=os.getenv('REDIS_PSK', None)
-)
-
 # Function to fetch all data (similar to your script)
 @cached(cache)
 def fetch_all_data(database, collection):
@@ -74,7 +62,7 @@ async def preload_cache():
         fetch_all_data("test", "courses")
         logger.info("Caching done for courses")
         docs = load_documents()
-        vectorstore = cache_vectorstore_and_embeddings(docs)
+        print(f"Loaded {len(docs)} documents")
         logger.info("Cache preloading done")
     except Exception as e:
         print(f"Error during cache preloading: {e}")
@@ -1190,11 +1178,6 @@ async def get_payment_details(payment_id: str):
         raise HTTPException(status_code=500, detail="Error processing payment details by Id")
 
 
-
-def save_session_history(session_id: str, history):
-    print(f"Saving session history: {history}")
-    redis_client.set(session_id, json.dumps(history))
-
 conversational_rag_chain = RAG_Loader()
 
 class ConnectionManager:
@@ -1206,7 +1189,6 @@ class ConnectionManager:
 
     def disconnect(self, session_id: str):
         self.active_connections.pop(session_id, None)
-        redis_client.delete(session_id)
 
     async def send_personal_message(self, message: str, session_id: str):
         websocket = self.active_connections.get(session_id)
@@ -1253,6 +1235,21 @@ async def handle_message(session_id: str, message: str) -> str:
     )["answer"]
     return response
 
+
+@app.get("/api/user/session")
+async def get_session_id(email: str = Depends(get_current_user)):
+    return {"session_id": generate_session_id(email)}
+
+
+@app.put("/api/user/session/update")
+async def update_session_id(email: str = Depends(get_current_user)):
+    return {"session_id": update_user_session_id(email)}
+
+@app.get("/api/user/conversation/")
+async def get_user_session_id(email: str = Depends(get_current_user)):
+    session_id = generate_session_id(email)
+    messages = get_conversation_by_session_id(session_id)
+    return {"session_id": session_id, "conversation":messages}
 
 if __name__ == "__main__":
     import uvicorn

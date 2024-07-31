@@ -92,6 +92,7 @@ import redis
 import uuid
 from rag.load_document import load_documents, cache_vectorstore_and_embeddings
 from rag.rag_loader import RAG_Loader
+from rag.rag_session_operation import generate_session_id, update_user_session_id, get_conversation_by_session_id
 
 
 # Models imports

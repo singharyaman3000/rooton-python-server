@@ -1,11 +1,13 @@
 from imports import *
+import shutil
 
 docs_cache = TTLCache(maxsize=1000000, ttl=86400)
 
 @cached(cache=docs_cache)
 def load_documents():
     print("Loading documents from source")
-    URLS = os.getenv("FEEDING_URL").split(",")
+    URLS = os.getenv("FEEDING_URL1").split(",")
+
     # Load, chunk and index the contents of the blog.
     loader = WebBaseLoader(
         web_paths=(URLS,),
@@ -23,6 +25,8 @@ def load_documents():
 
 def cache_vectorstore_and_embeddings(docs):
     DB_PATH = "vectorstores/db/"
+    if os.path.exists(DB_PATH):
+        shutil.rmtree("vectorstores")
     embeddings = OpenAIEmbeddings()
     vectorstore = Chroma.from_documents(documents=docs, persist_directory=DB_PATH, embedding=embeddings)
     return vectorstore
