@@ -6,7 +6,7 @@ docs_cache = TTLCache(maxsize=1000000, ttl=86400)
 @cached(cache=docs_cache)
 def load_documents():
     print("Loading documents from source")
-    URLS = os.getenv("FEEDING_URL1").split(",")
+    URLS = os.getenv("FEEDING_URL_OINP2").split(",")
 
     # Load, chunk and index the contents of the blog.
     loader = WebBaseLoader(

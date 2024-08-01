@@ -61,8 +61,6 @@ async def preload_cache():
         logger.info("Caching started")
         fetch_all_data("test", "courses")
         logger.info("Caching done for courses")
-        docs = load_documents()
-        print(f"Loaded {len(docs)} documents")
         logger.info("Cache preloading done")
     except Exception as e:
         print(f"Error during cache preloading: {e}")
