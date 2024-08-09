@@ -1,43 +1,52 @@
-# Use the official Python 3.11.3 slim image
-FROM python:3.11.3-slim
+# Use the official Python 3.11 slim image
+FROM python:3.11-slim
+
+# Set environment variables to avoid interactive prompts during installation
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Set the working directory
 WORKDIR /app
 
-# Install necessary system dependencies and remove any pre-installed sqlite3
+# Install necessary system dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     wget \
     build-essential \
     libreadline-dev \
-    libsqlite3-dev && \
-    apt-get remove -y sqlite3 && \
+    libssl-dev \
+    zlib1g-dev \
+    libbz2-dev \
+    libncurses5-dev \
+    libncursesw5-dev \
+    libffi-dev \
+    libsqlite3-dev \
+    sqlite3 \
+    python3.11-venv && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Download and compile SQLite 3.41.2
-RUN wget https://www.sqlite.org/2023/sqlite-autoconf-3410200.tar.gz && \
-    tar xvfz sqlite-autoconf-3410200.tar.gz && \
-    cd sqlite-autoconf-3410200 && \
-    ./configure && \
-    make && \
-    make install && \
-    cd .. && \
-    rm -rf sqlite-autoconf-3410200*
-
-# Verify sqlite3 version
+# Verify sqlite3 version to ensure compatibility
 RUN sqlite3 --version
+
+# Create a virtual environment named rooton-be
+RUN python3.11 -m venv /opt/rooton-be
+
+# Activate the virtual environment and upgrade pip
+RUN /opt/rooton-be/bin/pip install --upgrade pip
+
+# Copy the application code into the container
+COPY . /app
 
 # Copy the requirements file into the container
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies in the virtual environment
+RUN /opt/rooton-be/bin/pip install --no-cache-dir -r requirements.txt
 
-# Copy the application code into the container
-COPY . .
+# Install pysqlite3-binary in the virtual environment
+RUN /opt/rooton-be/bin/pip install --no-cache-dir pysqlite3-binary
 
-# Copy the .env file
-COPY .env .
+# Ensure the virtual environment is activated by default
+ENV PATH="/opt/rooton-be/bin:$PATH"
 
 # Expose the port that the app runs on
 EXPOSE 8080
