@@ -1226,12 +1226,14 @@ async def websocket_endpoint(websocket: WebSocket):
         print("Bye Bye")
         manager.disconnect(session_id)
 
-async def handle_message(session_id: str, message: str) -> str:
+async def handle_message(session_id: str, message: str, iterations: int = 3) -> str:
+    current_output = message
     response = conversational_rag_chain.invoke(
-        {"input": message},
+        {"input": current_output},
         config={"configurable": {"session_id": session_id}}
-    )["answer"]
-    return response
+    )
+    answer = response["answer"]
+    return answer
 
 
 @app.get("/api/user/session")

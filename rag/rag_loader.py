@@ -1,7 +1,6 @@
 from imports import *
 from rich import print
-from .load_document import load_documents, cache_vectorstore_and_embeddings
-from dotenv import load_dotenv
+
 load_dotenv()
 
 from langchain_openai import ChatOpenAI
@@ -14,6 +13,7 @@ from langchain.prompts import (
     ChatPromptTemplate,
     MessagesPlaceholder,
 )
+from rag.load_document import load_documents, load_documents_with_recursive_chunking,cache_vectorstore_and_embeddings_from_text, cache_vectorstore_and_embeddings_from_docs
 
 store = {}
 
@@ -25,18 +25,19 @@ def get_session_history(session_id: str) -> BaseChatMessageHistory:
     return store[session_id]
 
 def RAG_Loader():
-    llm = ChatOpenAI(model="gpt-4o", temperature=0)
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-    docs = load_documents()
+    docs = load_documents_with_recursive_chunking()  # Load your documents here
     print(f"Loaded {len(docs)} documents")
 
-    vectorstore = cache_vectorstore_and_embeddings(docs)
-    retriever = vectorstore.as_retriever()
+    vectorstore = cache_vectorstore_and_embeddings_from_text(docs)
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 10})
 
     contextualize_q_system_prompt = """Given a chat history and the latest user question \
     which might reference context in the chat history, formulate a standalone question \
     which can be understood without the chat history. Do NOT answer the question, \
     just reformulate it if needed and otherwise return it as is."""
+
     contextualize_q_prompt = ChatPromptTemplate.from_messages(
         [
             ("system", contextualize_q_system_prompt),
@@ -44,13 +45,18 @@ def RAG_Loader():
             ("human", "{input}"),
         ]
     )
+
     history_aware_retriever = create_history_aware_retriever(
         llm, retriever, contextualize_q_prompt
     )
 
     qa_system_prompt = """You are an assistant specialized in assisting individuals with Permanent Residency (PR) applications in Canada through the Ontario Immigrant Nominee Program (OINP).
+
+    Maintain a conversational tone, always.
+
     Use the following retrieved context to answer user queries accurately:
     Use three sentences maximum and keep the answer concise.
+
     {context}
 
     When a user inquires about their eligibility for PR through OINP, engage in a structured question-and-answer session using the provided questionnaire to gather necessary information.
@@ -62,7 +68,14 @@ def RAG_Loader():
 
     If any information is unclear or missing, ask follow-up questions to gather the necessary details before proceeding. Aim to keep responses clear, concise, and focused on actionable advice, helping users understand their next steps in the application process.
 
-    Limit each response to addressing one key area at a time to maintain clarity and prevent information overload."""
+    Even if you have all the information at once, don't share them all.
+    Instead share one section at a time and ask follow-up questions to gather the necessary details before proceeding.
+
+    Apply a chain-of-thought approach: Explain your reasoning process step-by-step before giving the final answer. This helps in breaking down complex inquiries into understandable segments.
+    
+    Last, donot reveal any information about yourself, and don't deviate from the topic at all. Even if the user asks, politely refuse it and stay on the above mentioned topic.
+    """
+
     qa_prompt = ChatPromptTemplate.from_messages(
         [
             ("system", qa_system_prompt),
@@ -70,15 +83,17 @@ def RAG_Loader():
             ("human", "{input}"),
         ]
     )
+
     question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
 
     rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
 
     runnable_rag_chain = RunnableWithMessageHistory(
         rag_chain,
-        get_session_history,
+        get_session_history,  # Assume this function is defined elsewhere
         input_messages_key="input",
         history_messages_key="chat_history",
         output_messages_key="answer",
     )
+    
     return runnable_rag_chain

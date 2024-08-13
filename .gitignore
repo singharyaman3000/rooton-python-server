@@ -53,7 +53,8 @@ coverage.xml
 .pytest_cache/
 cover/
 backup/
-vectorstores/
+vectorstores_texts/
+vectorstores_docs/
 
 # Translations
 *.mo
@@ -125,6 +126,7 @@ ENV/
 env.bak/
 venv.bak/
 rooton-be
+
 
 # Spyder project settings
 .spyderproject
