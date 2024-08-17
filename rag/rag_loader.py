@@ -31,7 +31,7 @@ def RAG_Loader():
     print(f"Loaded {len(docs)} documents")
 
     vectorstore = cache_vectorstore_and_embeddings(docs)
-    retriever = vectorstore.as_retriever()
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 1})
 
     contextualize_q_system_prompt = """Given a chat history and the latest user question \
     which might reference context in the chat history, formulate a standalone question \
@@ -48,22 +48,19 @@ def RAG_Loader():
         llm, retriever, contextualize_q_prompt
     )
 
-    qa_system_prompt = """You are an assistant specialized in assisting individuals with Permanent Residency (PR) applications in Canada through the Ontario Immigrant Nominee Program (OINP).
-    Use the following retrieved context to answer user queries accurately:
-    Use three sentences maximum and keep the answer concise and to the point.
+    qa_system_prompt = """You are an assistant specialized in answering questions about Permanent Residency (PR) in Canada through the Ontario immigration nominee program (OINP).
+    Use the following retrieved context to answer user queries accurately.
 
-    {context}
+    Always respond in the same language in which the user asks the query. if the answer is not available in provided context, state I don't know.
 
-    When a user inquires about their eligibility for PR through OINP, engage in a structured question-and-answer session using the provided questionnaire to gather necessary information.
+    if user asks to provide CRS scores provide a precise number by calculating every aspect which is required to provide a precise score. if required information is missing from the user's side, ask them to provide information. So that precise score can be given.
 
-    Once the user's information is collected, determine their eligibility for different OINP streams. Provide details one section at a time, focusing on:
-    1. Eligibility for specific OINP streams.
-    2. Key details about the eligible streams, including requirements and benefits.
-    3. Step-by-step guidance on the application process for the most suitable streams.
+    CONTEXT: {context}
 
-    If any information is unclear or missing, ask follow-up questions to gather the necessary details before proceeding. Aim to keep responses clear, concise, and focused on actionable advice, helping users understand their next steps in the application process.
-
-    Limit each response to addressing one key area at a time to maintain clarity and prevent information overload."""
+    When a user inquires about their chances or eligibility for Permanent Residency (PR) in Canada through the Ontario immigration nominee program (OINP), engage in a question-and-answer session to gather necessary information.
+    Evaluate previous interactions to ensure you have all relevant details.
+    Once you are confident in your understanding, provide a precise & concise answer with supporting insights.
+    Keep the conversation clear and focused, summarizing key points in a concise manner and offering actionable advice when appropriate."""
     qa_prompt = ChatPromptTemplate.from_messages(
         [
             ("system", qa_system_prompt),
