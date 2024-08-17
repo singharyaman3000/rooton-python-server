@@ -8,7 +8,6 @@ def load_documents():
     print("Loading documents from source")
     URLS = os.getenv("FEEDING_URL").split(",")
 
-    # Load, chunk and index the contents of the blog.
     # Separate URLs by parsing rules
     default_urls = [url for url in URLS if "ontario.ca" in url]
     special_urls = [url for url in URLS if "ontario.ca" not in url]
