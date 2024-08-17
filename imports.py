@@ -97,7 +97,6 @@ from rag.rag_session_operation import generate_session_id, update_user_session_i
 
 # Models imports
 from models import *
-from models import ConnectionManager
 
 #for Debugging purposes
 import logging
