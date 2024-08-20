@@ -1176,7 +1176,7 @@ async def get_payment_details(payment_id: str):
         raise HTTPException(status_code=500, detail="Error processing payment details by Id")
 
 
-conversational_rag_chain = RAG_Loader()
+conversational_rag_chain = RAG_Loader_with_refined_chaining()
 
 @app.post("/api/chat", response_model=MessageResponse)
 async def chat_endpoint(message_request: MessageRequest, email: str = Depends(get_current_user)):

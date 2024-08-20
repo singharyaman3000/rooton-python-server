@@ -4,8 +4,6 @@ from rich import print
 load_dotenv()
 
 from langchain_openai import ChatOpenAI
-from langchain.memory import ConversationBufferMemory
-from langchain.chains import LLMChain
 from langchain_community.chat_message_histories.upstash_redis import (
     UpstashRedisChatMessageHistory,
 )
@@ -13,6 +11,7 @@ from langchain.prompts import (
     ChatPromptTemplate,
     MessagesPlaceholder,
 )
+
 from rag.load_document import load_documents, load_documents_with_recursive_chunking,cache_vectorstore_and_embeddings_from_text, cache_vectorstore_and_embeddings_from_docs
 
 store = {}
@@ -25,12 +24,12 @@ def get_session_history(session_id: str) -> BaseChatMessageHistory:
     return store[session_id]
 
 def RAG_Loader():
-    llm = ChatOpenAI(model="gpt-4o-mini-mini", temperature=0)
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-    docs = load_documents_with_recursive_chunking()  # Load your documents here
+    docs = load_documents()  # Load your documents here
     print(f"Loaded {len(docs)} documents")
 
-    vectorstore = cache_vectorstore_and_embeddings(docs)
+    vectorstore = cache_vectorstore_and_embeddings_from_docs(docs)
     retriever = vectorstore.as_retriever(search_kwargs={"k": 1})
 
     contextualize_q_system_prompt = """Given a chat history and the latest user question \

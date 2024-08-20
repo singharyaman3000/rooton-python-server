@@ -92,6 +92,7 @@ import redis
 import uuid
 from rag.rag_loader import RAG_Loader
 from rag.rag_session_operation import generate_session_id, update_user_session_id, get_conversation_by_session_id
+from rag.refine_chaining import RAG_Loader_with_refined_chaining
 
 
 # Models imports

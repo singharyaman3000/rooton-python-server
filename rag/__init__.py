@@ -1,3 +1,4 @@
 from rag.load_document import load_documents,load_documents_with_recursive_chunking, cache_vectorstore_and_embeddings_from_docs,cache_vectorstore_and_embeddings_from_text
 from rag.rag_loader import RAG_Loader
 from rag.rag_session_operation import generate_session_id, update_user_session_id, get_conversation_by_session_id
+from rag.refine_chaining import RAG_Loader_with_refined_chaining
