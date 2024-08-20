@@ -130,6 +130,10 @@ class Payment(BaseModel):
     details: Dict[str, dict]
     invoice_id: Optional[str] = None
 
-class RAG_Message(BaseModel):
+class MessageRequest(BaseModel):
+    session_id: str = None
+    message: str
+
+class MessageResponse(BaseModel):
     session_id: str
-    userprompt: str
+    response: str

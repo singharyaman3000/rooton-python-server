@@ -1,0 +1,6 @@
+rooton-be/
+__pycache__/
+
+*.env
+*.env.*
+env.*

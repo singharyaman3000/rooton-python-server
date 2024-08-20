@@ -1178,53 +1178,21 @@ async def get_payment_details(payment_id: str):
 
 conversational_rag_chain = RAG_Loader()
 
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: Dict[str, WebSocket] = {}
-
-    async def connect(self, websocket: WebSocket, session_id: str):
-        self.active_connections[session_id] = websocket
-
-    def disconnect(self, session_id: str):
-        self.active_connections.pop(session_id, None)
-
-    async def send_personal_message(self, message: str, session_id: str):
-        websocket = self.active_connections.get(session_id)
-        if websocket:
-            await websocket.send_text(message)
-    
-    async def send_rag_response(self, message: str, session_id: str):
-        websocket = self.active_connections.get(session_id)
-        if websocket:
-            await websocket.send_json({"session_id": session_id, "message": message})
-
-    async def broadcast(self, message: str):
-        for connection in self.active_connections.values():
-            await connection.send_text(message)
-
-manager = ConnectionManager()
-
-
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    session_id = websocket.query_params.get("session_id")
-    if not session_id:
-        session_id = str(uuid.uuid4())
-        await websocket.send_json({"session_id": session_id})
-    await manager.connect(websocket, session_id)
-
+@app.post("/api/chat", response_model=MessageResponse)
+async def chat_endpoint(message_request: MessageRequest, email: str = Depends(get_current_user)):
+    session_id = message_request.session_id
     try:
-        while True:
-            data = await websocket.receive_json()
-            message = data["message"]
-            response = await handle_message(session_id, message)
-            print(response)
-            await manager.send_rag_response(response, session_id)
-    except WebSocketDisconnect:
-        print("Bye Bye")
-        manager.disconnect(session_id)
+        if not session_id:
+            session_id = str(uuid.uuid4())
+
+        message = message_request.message
+        response = await handle_message(session_id, message)
+
+        return MessageResponse(session_id=session_id, response=response)
+    except Exception as e:
+        logging.error(f"Error in Chat API: {e}")
+        raise HTTPException(status_code=500, detail="Error in chat_endpoint_fn")
+
 
 async def handle_message(session_id: str, message: str, iterations: int = 3) -> str:
     current_output = message

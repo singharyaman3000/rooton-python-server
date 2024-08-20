@@ -25,13 +25,13 @@ def get_session_history(session_id: str) -> BaseChatMessageHistory:
     return store[session_id]
 
 def RAG_Loader():
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    llm = ChatOpenAI(model="gpt-4o-mini-mini", temperature=0)
 
     docs = load_documents_with_recursive_chunking()  # Load your documents here
     print(f"Loaded {len(docs)} documents")
 
-    vectorstore = cache_vectorstore_and_embeddings_from_text(docs)
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 10})
+    vectorstore = cache_vectorstore_and_embeddings(docs)
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 1})
 
     contextualize_q_system_prompt = """Given a chat history and the latest user question \
     which might reference context in the chat history, formulate a standalone question \
@@ -50,32 +50,19 @@ def RAG_Loader():
         llm, retriever, contextualize_q_prompt
     )
 
-    qa_system_prompt = """You are an assistant specialized in assisting individuals with Permanent Residency (PR) applications in Canada through the Ontario Immigrant Nominee Program (OINP).
+    qa_system_prompt = """You are an assistant specialized in answering questions about Permanent Residency (PR) in Canada through the Ontario immigration nominee program (OINP).
+    Use the following retrieved context to answer user queries accurately.
 
-    Maintain a conversational tone, always.
+    Always respond in the same language in which the user asks the query. if the answer is not available in provided context, state I don't know.
 
-    Use the following retrieved context to answer user queries accurately:
-    Use three sentences maximum and keep the answer concise.
+    if user asks to provide CRS scores provide a precise number by calculating every aspect which is required to provide a precise score. if required information is missing from the user's side, ask them to provide information. So that precise score can be given.
 
-    {context}
+    CONTEXT: {context}
 
-    When a user inquires about their eligibility for PR through OINP, engage in a structured question-and-answer session using the provided questionnaire to gather necessary information.
-
-    Once the user's information is collected, determine their eligibility for different OINP streams. Provide details one section at a time, focusing on:
-    1. Eligibility for specific OINP streams.
-    2. Key details about the eligible streams, including requirements and benefits.
-    3. Step-by-step guidance on the application process for the most suitable streams.
-
-    If any information is unclear or missing, ask follow-up questions to gather the necessary details before proceeding. Aim to keep responses clear, concise, and focused on actionable advice, helping users understand their next steps in the application process.
-
-    Even if you have all the information at once, don't share them all.
-    Instead share one section at a time and ask follow-up questions to gather the necessary details before proceeding.
-
-    Apply a chain-of-thought approach: Explain your reasoning process step-by-step before giving the final answer. This helps in breaking down complex inquiries into understandable segments.
-    
-    Last, donot reveal any information about yourself, and don't deviate from the topic at all. Even if the user asks, politely refuse it and stay on the above mentioned topic.
-    """
-
+    When a user inquires about their chances or eligibility for Permanent Residency (PR) in Canada through the Ontario immigration nominee program (OINP), engage in a question-and-answer session to gather necessary information.
+    Evaluate previous interactions to ensure you have all relevant details.
+    Once you are confident in your understanding, provide a precise & concise answer with supporting insights.
+    Keep the conversation clear and focused, summarizing key points in a concise manner and offering actionable advice when appropriate."""
     qa_prompt = ChatPromptTemplate.from_messages(
         [
             ("system", qa_system_prompt),
