@@ -245,6 +245,16 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
 
 @app.post("/api/recommend_courses", response_model=CourseResponse)
 async def recommend_courses(request: CourseRequest, email: str = Depends(get_current_user)):
+    """
+    Handles the API endpoint for recommending courses based on user input.
+    
+    Parameters:
+    request (CourseRequest): The user's course request data.
+    email (str): The email of the current user.
+    
+    Returns:
+    CourseResponse: A response containing the recommended courses and additional metadata.
+    """
     try:
         start = time.time()
         my_dict = request.dictionary
@@ -1180,6 +1190,19 @@ conversational_rag_chain = RAG_Loader()
 
 @app.post("/api/chat", response_model=MessageResponse)
 async def chat_endpoint(message_request: MessageRequest, email: str = Depends(get_current_user)):
+    """
+    Handles incoming chat requests from users.
+
+    Args:
+        message_request (MessageRequest): The incoming chat message request.
+        email (str): The email of the user sending the request. Defaults to the current user.
+
+    Returns:
+        MessageResponse: A response to the user's chat message.
+
+    Raises:
+        HTTPException: If an error occurs while processing the chat request.
+    """
     session_id = message_request.session_id
     try:
         if not session_id:
@@ -1195,6 +1218,16 @@ async def chat_endpoint(message_request: MessageRequest, email: str = Depends(ge
 
 
 async def handle_message(session_id: str, message: str) -> str:
+    """
+    Handles incoming chat messages by invoking the conversational RAG chain.
+
+    Args:
+        session_id (str): The unique identifier for the user's session.
+        message (str): The incoming chat message.
+
+    Returns:
+        str: The response to the user's chat message.
+    """
     response = conversational_rag_chain.invoke(
         {"input": message},
         config={"configurable": {"session_id": session_id}}
@@ -1204,15 +1237,42 @@ async def handle_message(session_id: str, message: str) -> str:
 
 @app.get("/api/user/session")
 async def get_session_id(email: str = Depends(get_current_user)):
+    """
+    Handles GET requests to retrieve a user's session ID.
+
+    Args:
+        email (str): The email address of the user. Defaults to the current user.
+
+    Returns:
+        dict: A dictionary containing the user's session ID.
+    """
     return {"session_id": generate_session_id(email)}
 
 
 @app.put("/api/user/session/update")
 async def update_session_id(email: str = Depends(get_current_user)):
+    """
+    Handles PUT requests to update a user's session ID.
+
+    Args:
+        email (str): The email address of the user. Defaults to the current user.
+
+    Returns:
+        dict: A dictionary containing the updated session ID.
+    """
     return {"session_id": update_user_session_id(email)}
 
 @app.get("/api/user/conversation/")
 async def get_user_session_id(email: str = Depends(get_current_user)):
+    """
+    Handles GET requests to retrieve a user's conversation history.
+
+    Args:
+        email (str): The email address of the user. Defaults to the current user.
+
+    Returns:
+        dict: A dictionary containing the user's session ID and conversation history.
+    """
     session_id = generate_session_id(email)
     messages = get_conversation_by_session_id(session_id)
     return {"session_id": session_id, "conversation":messages}

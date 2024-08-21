@@ -18,6 +18,24 @@ from langchain.prompts import (
 store = {}
 
 def get_session_history(session_id: str) -> BaseChatMessageHistory:
+    """
+    Returns the chat message history for the given session ID.
+
+    Args:
+        session_id (str): The ID of the session.
+
+    Returns:
+        BaseChatMessageHistory: The chat message history for the session.
+
+    Raises:
+        None
+
+    Note:
+        This function uses the `store` dictionary to store and retrieve chat message histories.
+        If the session ID is not found in the `store`, a new `UpstashRedisChatMessageHistory` object is created with the provided session ID and stored in the `store`.
+        The `url` and `token` for the `UpstashRedisChatMessageHistory` object are obtained from the environment variables `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`, respectively.
+        The `ttl` for the `UpstashRedisChatMessageHistory` object is set to 36000.
+    """
     if session_id not in store:
         store[session_id] = UpstashRedisChatMessageHistory(
             url=os.getenv("UPSTASH_REDIS_REST_URL"), token=os.getenv("UPSTASH_REDIS_REST_TOKEN"), ttl=36000, session_id=session_id
@@ -25,6 +43,15 @@ def get_session_history(session_id: str) -> BaseChatMessageHistory:
     return store[session_id]
 
 def RAG_Loader():
+    """
+    Initializes and returns a runnable RAG chain for answering questions about Permanent Residency (PR) in Canada through the Ontario immigration nominee program (OINP).
+
+    The chain is composed of several components:
+    - A history-aware retriever that uses a contextualized question prompt to formulate standalone questions from chat history and user input.
+    - A question-answer chain that uses a specialized prompt to answer user queries accurately, providing precise CRS scores and evaluating eligibility for PR.
+
+    The function takes no parameters and returns a RunnableWithMessageHistory instance, which can be used to execute the RAG chain with a given input message and chat history.
+    """
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
     docs = load_documents()

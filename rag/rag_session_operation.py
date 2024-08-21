@@ -6,6 +6,19 @@ from langchain.schema import HumanMessage, AIMessage
 
 
 def generate_session_id(email):
+    """
+    Generates a unique session ID for a given email.
+
+    Args:
+        email (str): The email address of the user.
+
+    Returns:
+        str: The generated session ID.
+
+    Raises:
+        Exception: If the session ID generation fails.
+
+    """
     database = "test"
     collection_name = "rag-session-collection"
 
@@ -27,6 +40,15 @@ def generate_session_id(email):
 
 
 def update_user_session_id(email):
+    """
+    Updates a user's session ID in the database.
+
+    Args:
+        email (str): The email address of the user.
+
+    Returns:
+        str: The new session ID.
+    """
     database = "test"
     collection_name = "rag-session-collection"
     session_id = str(uuid.uuid4())
@@ -39,6 +61,15 @@ def update_user_session_id(email):
 
 
 def get_conversation_by_session_id(session_id: str) -> list:
+    """
+    Retrieves a conversation history by a given session ID.
+
+    Args:
+        session_id (str): The unique identifier of the session.
+
+    Returns:
+        list: A list of messages in the conversation, where each message is a dictionary containing the type of message (human or ai) and the content of the message.
+    """
     message_history = get_session_history(session_id)
     convo_messages = message_history.messages
     json_messages = []

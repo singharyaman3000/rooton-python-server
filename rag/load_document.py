@@ -5,6 +5,16 @@ docs_cache = TTLCache(maxsize=1000000, ttl=86400)
 
 @cached(cache=docs_cache)
 def load_documents():
+    """
+    Loads documents from source URLs, separates them by parsing rules, and returns the combined documents.
+
+    The function uses WebBaseLoader to load documents from default and special URLs, 
+    and applies specific parsing rules to default URLs.
+
+    Returns:
+        list: A list of documents loaded from the source URLs.
+    """
+
     print("Loading documents from source")
     URLS = os.getenv("FEEDING_URL").split(",")
 
@@ -45,6 +55,15 @@ def load_documents():
 
 
 def cache_vectorstore_and_embeddings(docs):
+    """
+    Caches the vector store and embeddings for the given documents.
+
+    Args:
+        docs (list): A list of documents to cache.
+
+    Returns:
+        Chroma: The cached vector store.
+    """
     DB_PATH = "vectorstores/db/"
     if os.path.exists(DB_PATH):
         shutil.rmtree("vectorstores")
